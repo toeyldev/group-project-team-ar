@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { orderChecklist } from './checklistOrdering.js';
+import { orderTargetChecklist as orderChecklist } from './targetNavigation.js';
 
 test('GET /api/items passes database rows through ordering and keeps the array contract', async () => {
   const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
@@ -23,6 +23,14 @@ test('GET /api/items passes database rows through ordering and keeps the array c
   });
   let payload: unknown;
   await handler({}, { json: (value: unknown) => { payload = value; } });
-  assert.deepEqual(payload, [rows[1], rows[0], rows[2]]);
-  assert.equal(JSON.stringify(payload), JSON.stringify([rows[1], rows[0], rows[2]]));
+  assert.deepEqual(payload, orderChecklist(rows));
+  assert.equal(JSON.stringify(payload), JSON.stringify(orderChecklist(rows)));
+  await handler({ query: { startAisle: 'E73' } }, { json: (value: unknown) => { payload = value; } });
+  assert.deepEqual(payload, orderChecklist(rows, 'E73'));
+  for (const startAisle of [[], {}, 'x'.repeat(41)]) {
+    let status = 200;
+    const res = { status(code: number) { status = code; return this; }, json() {} };
+    await handler({ query: { startAisle } }, res);
+    assert.equal(status, 400);
+  }
 });

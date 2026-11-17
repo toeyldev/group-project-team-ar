@@ -36,9 +36,6 @@
         <option value="Potted plant">Potted plant</option>
         <option value="Keyboard">Keyboard</option>
         <option value="Backpack">Backpack</option>
-        <option value="Umbrella">Umbrella</option>
-        <option value="Handbag">Handbag</option>
-        <option value="Tie">Tie</option>
         <option value="Suitcase">Suitcase</option>
         <option value="Sports ball">Sports ball</option>
         <option value="Baseball bat">Baseball bat</option>
@@ -60,15 +57,10 @@
         <option value="Donut">Donut</option>
         <option value="Cake">Cake</option>
         <option value="Chair">Chair</option>
-        <option value="Tv">Tv</option>
         <option value="Laptop">Laptop</option>
         <option value="Mouse">Mouse</option>
-        <option value="Remote">Remote</option>
-        <option value="Toaster">Toaster</option>
         <option value="Book">Book</option>
         <option value="Clock">Clock</option>
-        <option value="Vase">Vase</option>
-        <option value="Scissors">Scissors</option>
         <option value="Teddy bear">Teddy bear</option>
         <option value="Hair drier">Hair drier</option>
         <option value="Toothbrush">Toothbrush</option>
@@ -87,8 +79,30 @@
       <button type="button" class="btn-secondary btn-strong" id="refreshBtn">Refresh from server</button>
     </div>
   </div>
+  <section class="app-card map-card" aria-labelledby="mapTitle">
+    <div class="app-card-head"><div>
+      <h2 id="mapTitle" class="app-title">Your store route</h2>
+      <p class="app-subtitle">Target · San Jose West</p>
+    </div></div>
+    <p class="map-notice">Prototype — verify paths in store. E73 and D74 are approximate kitchen-area stops because the PDF does not label them. Markers show aisle access points.</p>
+    <div class="map-controls" aria-label="Map controls">
+      <button type="button" class="btn-secondary" id="zoomIn" aria-label="Zoom in">+</button>
+      <button type="button" class="btn-secondary" id="zoomOut" aria-label="Zoom out">−</button>
+      <button type="button" class="btn-secondary" id="resetMap">Reset view</button>
+      <button type="button" class="btn-secondary" id="newTrip">New trip · entrance</button>
+    </div>
+    <p class="app-subtitle map-help">Drag to pan · scroll or use +/− to zoom · arrow keys to pan</p>
+    <svg id="storeMap" role="img" aria-label="Target floor plan with red shopping route" tabindex="0" preserveAspectRatio="xMidYMid meet" viewBox="0 0 492 540">
+      <image id="storeMapImage" href="/assets/target-san-jose-west.png" width="492" height="540" />
+      <g id="storeMapRoute"></g>
+      <circle id="navigationStart" cx="96" cy="512" r="5" fill="#2563eb" stroke="white" stroke-width="2" />
+      <text id="navigationStartLabel" x="104" y="504" class="map-label">Start · entrance</text>
+    </svg>
+    <p id="mapStatus" class="map-status" role="status" aria-live="polite">Loading map…</p>
+  </section>
 </main>
 
+<script src="js/store-navigation.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

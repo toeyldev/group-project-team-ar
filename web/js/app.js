@@ -12,9 +12,6 @@ const AISLES_BY_ITEM = {
   'potted plant': 'B5',
   'keyboard': 'D36',
   'backpack': 'P26',
-  'umbrella': 'UT50',
-  'handbag': 'AC50',
-  'tie': 'MN50',
   'suitcase': 'D49',
   'sports ball': 'Q21',
   'baseball bat': 'Q21',
@@ -36,19 +33,21 @@ const AISLES_BY_ITEM = {
   'donut': 'B31',
   'cake': 'B39',
   'chair': 'E83',
-  'tv': 'D69',
   'laptop': 'D27',
   'mouse': 'D36',
-  'remote': 'D69',
-  'toaster': 'D73',
   'book': 'D48',
   'clock': 'E83',
-  'vase': 'E10',
-  'scissors': 'A23',
   'teddy bear': 'P24',
   'hair drier': 'C20',
   'toothbrush': 'C27',
 };
+
+// Hide only these products, preserving all cached/database records and statuses.
+const HIDDEN_ITEMS = new Set(['scissors', 'handbag', 'tv', 'remote', 'toaster', 'vase', 'tie', 'umbrella']);
+function isActiveItem(item) {
+  return !HIDDEN_ITEMS.has(item.name.trim().toLowerCase());
+}
+function activeItems() { return items.filter(isActiveItem); }
 
 function aisleForItem(name) {
   const key = name.trim().toLowerCase();
@@ -75,7 +74,8 @@ async function tryHealth() {
 }
 
 async function loadFromServer() {
-  const r = await fetch('/api/items');
+  const from = window.StoreNavigation?.getStartAisle?.();
+  const r = await fetch('/api/items' + (from ? `?startAisle=${encodeURIComponent(from)}` : ''));
   if (!r.ok) throw new Error('failed to load items');
   const rows = await r.json();
   items = rows.map(serverRowToClient);
@@ -92,7 +92,7 @@ function loadLocalOnly() {
 }
 
 function seedDemoItems() {
-  ['Milk', 'Eggs', 'Bread'].forEach((name) => {
+  ['Banana', 'Fork', 'Microwave'].forEach((name) => {
     items.push({
       id: nextId++,
       name,
@@ -104,20 +104,36 @@ function seedDemoItems() {
   localStorage.setItem(LS_NEXT, String(nextId));
 }
 
-function renderList() {
+function escapeItemText(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+function renderList(routeReady = false) {
+  // Always keep completed rows at the bottom, including cached/offline lists.
+  items.sort((a, b) => Number(a.checked) - Number(b.checked));
+  if (!routeReady) {
+    items.forEach(item => { delete item.stopNumber; });
+    window.StoreNavigation?.update(activeItems(), route => {
+      const order = route.stops.map(stop => stop.aisle);
+      const rank = item => { const i = order.indexOf((item.aisle ?? '').trim().toUpperCase()); return i < 0 ? order.length : i; };
+      items.sort((a, b) => Number(a.checked) - Number(b.checked) || (a.checked ? 0 : rank(a) - rank(b)));
+      items.forEach(item => { item.stopNumber = item.checked || rank(item) === order.length ? null : rank(item) + 1; });
+      renderList(true);
+    });
+  }
   const ul = document.getElementById('shoppingList');
   ul.innerHTML = '';
-  items.forEach((item) => {
+  activeItems().forEach((item) => {
     const li = document.createElement('li');
-    li.className = 'list-item' + (item.detected ? ' detected' : '');
+    li.className = 'list-item' + (item.detected ? ' detected' : '') + (item.stopNumber === 1 ? ' next-stop' : '');
     li.dataset.id = item.id;
     const statusLabel = item.checked ? 'Picked up' : 'Not picked up';
     const statusClass = item.checked ? 'fulfilled' : 'pending';
-    const aisleLabel = item.aisle || 'N/A';
+    const aisleLabel = escapeItemText(item.aisle || 'N/A');
     li.innerHTML = `
       <div class="item-check ${item.checked ? 'checked' : ''}" data-action="toggle" data-id="${item.id}"></div>
-      <span class="item-name ${item.checked ? 'strikethrough' : ''}">${item.name}</span>
-      <span class="item-aisle">Aisle ${aisleLabel}</span>
+      <span class="item-name ${item.checked ? 'strikethrough' : ''}">${escapeItemText(item.name)}</span>
+      <span class="item-aisle">${item.stopNumber ? `Stop ${item.stopNumber} · ` : ''}Aisle ${aisleLabel}</span>
       <span class="item-status-badge ${statusClass}">${statusLabel}</span>
       <button type="button" class="item-delete" data-action="delete" data-id="${item.id}" title="Remove">✕</button>
     `;
@@ -134,8 +150,9 @@ function renderList() {
 }
 
 function updateCount() {
-  const total = items.length;
-  const done = items.filter((i) => i.checked).length;
+  const active = activeItems();
+  const total = active.length;
+  const done = active.filter((i) => i.checked).length;
   document.getElementById('itemCount').textContent =
     total === 0 ? '0 items' : `${done}/${total} picked up`;
 }
@@ -144,6 +161,10 @@ async function addItem() {
   const input = document.getElementById('itemInput');
   const raw = input.value.trim();
   if (!raw) return;
+  if (!isActiveItem({ name: raw })) {
+    alert('This item is unavailable because its aisle is not mapped. Choose another item.');
+    return;
+  }
   const name = raw.charAt(0).toUpperCase() + raw.slice(1);
 
   if (apiOnline) {
@@ -174,7 +195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('commonItemSelect').addEventListener('change', (e) => {
     const sel = e.target;
     const v = sel.value;
-    if (!v) return;
+    if (!v || !isActiveItem({ name: v })) return;
     document.getElementById('itemInput').value = v;
     sel.selectedIndex = 0;
     document.getElementById('itemInput').focus();
@@ -186,6 +207,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('addBtn').addEventListener('click', () => addItem());
   document.getElementById('clearPickedBtn').addEventListener('click', () => clearChecked());
   document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer());
+  document.getElementById('newTrip').addEventListener('click', () => {
+    window.StoreNavigation?.resetTrip();
+    renderList();
+  });
 
   apiOnline = await tryHealth();
 
@@ -207,9 +232,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderList();
 });
 
-async function toggleCheck(id) {
+async function toggleCheck(id, detected = false) {
   const item = items.find((i) => i.id === id);
-  if (!item) return;
+  if (!item || !isActiveItem(item)) return;
   const newChecked = !item.checked;
   const status = newChecked ? 'picked_up' : 'not_picked_up';
 
@@ -221,7 +246,12 @@ async function toggleCheck(id) {
         body: JSON.stringify({ status }),
       });
       if (!r.ok) throw new Error('patch failed');
+      if (newChecked) await window.StoreNavigation?.recordPickup(item.aisle);
       await loadFromServer();
+      if (detected) {
+        const refreshed = items.find(i => i.id === id);
+        if (refreshed) refreshed.detected = true;
+      }
       renderList();
       return;
     } catch {
@@ -231,10 +261,13 @@ async function toggleCheck(id) {
   }
 
   item.checked = newChecked;
+  if (detected) item.detected = true;
+  if (newChecked) await window.StoreNavigation?.recordPickup(item.aisle);
   renderList();
 }
 
 async function deleteItem(id) {
+  if (!activeItems().some(item => item.id === id)) return;
   if (apiOnline) {
     try {
       const r = await fetch(`/api/items/${id}`, { method: 'DELETE' });
@@ -252,7 +285,7 @@ async function deleteItem(id) {
 }
 
 async function clearChecked() {
-  const toRemove = items.filter((i) => i.checked);
+  const toRemove = activeItems().filter((i) => i.checked);
   if (apiOnline) {
     try {
       for (const i of toRemove) {
@@ -265,7 +298,7 @@ async function clearChecked() {
     await refreshFromServer();
     return;
   }
-  items = items.filter((i) => !i.checked);
+  items = items.filter((i) => !i.checked || !isActiveItem(i));
   renderList();
 }
 
@@ -283,25 +316,10 @@ function saveItems() {
   localStorage.setItem(LS_KEY, JSON.stringify(items));
 }
 
-window.appItems = () => items;
+window.appItems = () => activeItems();
 window.markDetected = async (name) => {
   const item = items.find((i) => i.name.toLowerCase() === name.toLowerCase());
-  if (item && !item.checked) {
-    item.detected = true;
-    item.checked = true;
-    if (apiOnline) {
-      try {
-        await fetch(`/api/items/${item.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'picked_up' }),
-        });
-      } catch {
-        /* ignore */
-      }
-    }
-    renderList();
-  }
+  if (item && isActiveItem(item) && !item.checked) await toggleCheck(item.id, true);
 };
 
 window.addItem = addItem;
