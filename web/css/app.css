@@ -344,8 +344,7 @@
 /* Keep the existing checklist card beside a shared-coordinate SVG floor plan. */
 .app-header-inner { max-width: 1280px; }
 .app-main { max-width: 1280px; display: grid; grid-template-columns: minmax(440px, 1fr) minmax(0, 1.3fr); gap: 24px; align-items: start; }
-.map-notice, .map-status { padding: 12px 18px; font-size: .8125rem; }
-.map-notice { background: #fffbeb; color: #92400e; }
+.map-status { padding: 12px 18px; font-size: .8125rem; }
 .map-controls { display: flex; gap: 8px; padding: 12px 18px 4px; }
 .map-controls .btn-secondary { min-width: 44px; flex: 0 1 auto; }
 .map-help { padding: 4px 18px 8px; }

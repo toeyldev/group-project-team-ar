@@ -26,7 +26,8 @@ checkout access, and current store conditions have **not** been field verified.
 
 E73 and D74 do **not** appear among the PDF's labels. Their points deliberately
 represent approximate kitchen-area approaches, not verified aisle coordinates.
-Both have an ≈ marker, a tooltip, and an always-visible warning. Other points
+Both retain an ≈ marker and a tooltip; the map's warning banner has been removed.
+These technical limitations still apply. Other points
 are manually selected access points near labeled shelf ends; they are not exact
 product positions. Some share access points (for example P24 and B49);
 markers are offset with a connector when crowded, while route endpoints stay put.
