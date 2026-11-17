@@ -27,15 +27,60 @@
     </div>
 
     <div class="add-row">
-      <input type="text" id="itemInput" class="item-input" placeholder="Add an item (e.g. Milk)" autocomplete="off" />
-      <button type="button" class="btn-primary" id="addBtn">Add</button>
+      <label class="visually-hidden" for="commonItemSelect">Choose an item to add</label>
+      <select id="commonItemSelect" class="item-input common-item-select" title="Choose an item to add">
+        <option value="">Choose an item…</option>
+        <option value="Cup">Cup</option>
+        <option value="Bottle">Bottle</option>
+        <option value="Microwave">Microwave</option>
+        <option value="Potted plant">Potted plant</option>
+        <option value="Keyboard">Keyboard</option>
+        <option value="Backpack">Backpack</option>
+        <option value="Umbrella">Umbrella</option>
+        <option value="Handbag">Handbag</option>
+        <option value="Tie">Tie</option>
+        <option value="Suitcase">Suitcase</option>
+        <option value="Sports ball">Sports ball</option>
+        <option value="Baseball bat">Baseball bat</option>
+        <option value="Baseball glove">Baseball glove</option>
+        <option value="Tennis racket">Tennis racket</option>
+        <option value="Wine glass">Wine glass</option>
+        <option value="Fork">Fork</option>
+        <option value="Knife">Knife</option>
+        <option value="Spoon">Spoon</option>
+        <option value="Bowl">Bowl</option>
+        <option value="Banana">Banana</option>
+        <option value="Apple">Apple</option>
+        <option value="Sandwich">Sandwich</option>
+        <option value="Orange">Orange</option>
+        <option value="Broccoli">Broccoli</option>
+        <option value="Carrot">Carrot</option>
+        <option value="Hot dog">Hot dog</option>
+        <option value="Pizza">Pizza</option>
+        <option value="Donut">Donut</option>
+        <option value="Cake">Cake</option>
+        <option value="Chair">Chair</option>
+        <option value="Tv">Tv</option>
+        <option value="Laptop">Laptop</option>
+        <option value="Mouse">Mouse</option>
+        <option value="Remote">Remote</option>
+        <option value="Toaster">Toaster</option>
+        <option value="Book">Book</option>
+        <option value="Clock">Clock</option>
+        <option value="Vase">Vase</option>
+        <option value="Scissors">Scissors</option>
+        <option value="Teddy bear">Teddy bear</option>
+        <option value="Hair drier">Hair drier</option>
+        <option value="Toothbrush">Toothbrush</option>
+      </select>
     </div>
 
+    <p class="app-status" id="appStatus" role="status" aria-live="polite"></p>
     <ul class="shopping-list" id="shoppingList"></ul>
 
     <div class="app-actions">
       <button type="button" class="btn-secondary" id="clearPickedBtn">Remove picked up</button>
-      <button type="button" class="btn-secondary btn-strong" id="refreshBtn">Refresh from server</button>
+      <button type="button" class="btn-secondary btn-strong" id="refreshBtn">Refresh now</button>
     </div>
 
     <p class="app-hint">Run <code>npm run dev</code> in the <code>server</code> folder, then open this page at <code>http://localhost:3000/app.html</code> to use the database.</p>

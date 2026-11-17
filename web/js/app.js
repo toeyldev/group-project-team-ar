@@ -1,9 +1,20 @@
 const LS_KEY = 'av_items';
 const LS_NEXT = 'av_nextId';
+const SERVER_SYNC_INTERVAL_MS = 2500;
 
 let items = [];
 let nextId = 1;
 let apiOnline = false;
+let refreshInProgress = false;
+let serverMutationInProgress = false;
+
+const commonItemSelect = document.getElementById('commonItemSelect');
+const appStatus = document.getElementById('appStatus');
+
+function setStatus(message, isError = false) {
+  if (appStatus.textContent !== message) appStatus.textContent = message;
+  appStatus.classList.toggle('error', isError);
+}
 
 function serverRowToClient(row) {
   return {
@@ -27,9 +38,26 @@ async function loadFromServer() {
   const r = await fetch('/api/items');
   if (!r.ok) throw new Error('failed to load items');
   const rows = await r.json();
-  items = rows.map(serverRowToClient);
-  nextId = items.length ? Math.max(...items.map((i) => i.id)) + 1 : 1;
-  saveItems();
+  const detectedById = new Map(items.map((item) => [item.id, item.detected]));
+  const nextItems = rows.map((row) => {
+    const item = serverRowToClient(row);
+    item.detected = detectedById.get(item.id) || false;
+    return item;
+  });
+  const changed = nextItems.length !== items.length || nextItems.some((item, index) => {
+    const current = items[index];
+    return !current
+      || current.id !== item.id
+      || current.name !== item.name
+      || current.checked !== item.checked
+      || current.detected !== item.detected;
+  });
+  nextId = nextItems.length ? Math.max(...nextItems.map((item) => item.id)) + 1 : 1;
+  if (changed) {
+    items = nextItems;
+    saveItems();
+  }
+  return changed;
 }
 
 function loadLocalOnly() {
@@ -83,13 +111,16 @@ function updateCount() {
     total === 0 ? '0 items' : `${done}/${total} picked up`;
 }
 
-async function addItem() {
-  const input = document.getElementById('itemInput');
-  const raw = input.value.trim();
-  if (!raw) return;
-  const name = raw.charAt(0).toUpperCase() + raw.slice(1);
+async function addItem(name) {
+  const isCatalogItem = Array.from(commonItemSelect.options)
+    .some((option) => option.value === name);
+  if (!isCatalogItem) {
+    setStatus('Choose an item from the menu.', true);
+    return;
+  }
 
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
       const r = await fetch('/api/items', {
         method: 'POST',
@@ -97,27 +128,31 @@ async function addItem() {
         body: JSON.stringify({ name }),
       });
       if (!r.ok) throw new Error('post failed');
-      const row = await r.json();
-      items.push(serverRowToClient(row));
-      input.value = '';
+      await loadFromServer();
       renderList();
+      setStatus(`${name} added. Changes from glasses sync automatically.`);
       return;
-    } catch {
+    } catch (error) {
       apiOnline = false;
+      setStatus(`Could not add ${name}: ${error.message}`, true);
+      return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
 
   items.push({ id: nextId++, name, checked: false, detected: false });
   localStorage.setItem(LS_NEXT, String(nextId));
-  input.value = '';
   renderList();
+  setStatus(`${name} added locally. It will not appear on glasses until the server reconnects.`, true);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('itemInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addItem();
+  commonItemSelect.addEventListener('change', () => {
+    const name = commonItemSelect.value;
+    commonItemSelect.selectedIndex = 0;
+    if (name) addItem(name);
   });
-  document.getElementById('addBtn').addEventListener('click', () => addItem());
   document.getElementById('clearPickedBtn').addEventListener('click', () => clearChecked());
   document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer());
 
@@ -139,6 +174,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   renderList();
+  setStatus(
+    apiOnline
+      ? 'Connected. Changes from glasses update automatically.'
+      : 'Server unavailable. Showing this browser’s saved list; changes will not reach glasses.',
+    !apiOnline
+  );
+  window.setInterval(() => {
+    if (document.visibilityState !== 'hidden') refreshFromServer();
+  }, SERVER_SYNC_INTERVAL_MS);
 });
 
 async function toggleCheck(id) {
@@ -148,6 +192,7 @@ async function toggleCheck(id) {
   const status = newChecked ? 'picked_up' : 'not_picked_up';
 
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
       const r = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
@@ -155,49 +200,89 @@ async function toggleCheck(id) {
         body: JSON.stringify({ status }),
       });
       if (!r.ok) throw new Error('patch failed');
-    } catch {
-      /* keep UI in sync locally even if request fails */
+      await loadFromServer();
+      renderList();
+      return;
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not update ${item.name}: ${error.message}`, true);
+      return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
 
   item.checked = newChecked;
   renderList();
+  setStatus('Working offline. Changes will not reach glasses until the server reconnects.', true);
 }
 
 async function deleteItem(id) {
+  const item = items.find((current) => current.id === id);
+  if (!item) return;
+
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
-      await fetch(`/api/items/${id}`, { method: 'DELETE' });
-    } catch {
-      /* still remove from UI */
+      const r = await fetch(`/api/items/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
+      await loadFromServer();
+      renderList();
+      return;
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not remove ${item.name}: ${error.message}`, true);
+      return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
   items = items.filter((i) => i.id !== id);
   renderList();
+  setStatus('Working offline. Changes will not reach glasses until the server reconnects.', true);
 }
 
 async function clearChecked() {
   const toRemove = items.filter((i) => i.checked);
   if (apiOnline) {
-    for (const i of toRemove) {
-      try {
-        await fetch(`/api/items/${i.id}`, { method: 'DELETE' });
-      } catch {
-        /* continue */
+    serverMutationInProgress = true;
+    try {
+      for (const item of toRemove) {
+        const r = await fetch(`/api/items/${item.id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`delete failed for ${item.name}`);
       }
+      await loadFromServer();
+      renderList();
+      return;
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not remove all picked-up items: ${error.message}`, true);
+      return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
   items = items.filter((i) => !i.checked);
   renderList();
+  setStatus('Working offline. Changes will not reach glasses until the server reconnects.', true);
 }
 
 async function refreshFromServer() {
-  if (!apiOnline) return;
+  if (refreshInProgress || serverMutationInProgress) return;
+  refreshInProgress = true;
   try {
-    await loadFromServer();
-    renderList();
-  } catch {
+    if (!apiOnline) {
+      apiOnline = await tryHealth();
+      if (!apiOnline) throw new Error('Checklist server is unavailable');
+    }
+    const changed = await loadFromServer();
+    if (changed) renderList();
+    setStatus('Connected. Changes from glasses update automatically.');
+  } catch (error) {
     apiOnline = false;
+    setStatus(`Unable to sync with the server: ${error.message}`, true);
+  } finally {
+    refreshInProgress = false;
   }
 }
 
@@ -212,14 +297,21 @@ window.markDetected = async (name) => {
     item.detected = true;
     item.checked = true;
     if (apiOnline) {
+      serverMutationInProgress = true;
       try {
-        await fetch(`/api/items/${item.id}`, {
+        const r = await fetch(`/api/items/${item.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'picked_up' }),
         });
-      } catch {
-        /* ignore */
+        if (!r.ok) throw new Error('update failed');
+        await loadFromServer();
+      } catch (error) {
+        apiOnline = false;
+        setStatus(`Could not update ${item.name}: ${error.message}`, true);
+        return;
+      } finally {
+        serverMutationInProgress = false;
       }
     }
     renderList();

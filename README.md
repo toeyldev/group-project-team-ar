@@ -150,7 +150,9 @@ The `npm --prefix server run test:api` command is also available as a shorthand
 for running the script from the server package.
 
 The API server must remain running in the first window while tests execute.
-The web page is available at `http://localhost:3000/app.html`.
+The web page is available at `http://localhost:3000/app.html`. Add supported
+items from the dropdown; changes made on the glasses appear automatically
+within a few seconds, and **Refresh now** remains available for manual sync.
 
 ---
 

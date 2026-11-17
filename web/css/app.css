@@ -134,6 +134,21 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
+.common-item-select {
+  cursor: pointer;
+}
+
+.app-status {
+  min-height: 38px;
+  padding: 10px 22px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.app-status.error {
+  color: var(--danger);
+}
+
 .btn-primary {
   font-family: var(--font);
   font-weight: 600;
