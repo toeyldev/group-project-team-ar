@@ -104,9 +104,85 @@ function seedDemoItems() {
   localStorage.setItem(LS_NEXT, String(nextId));
 }
 
+let tripEstimateRequestId = 0;
+
+const tripCurrency = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
+
+function formatTripDuration(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (minutes === 0) return `${remainder} sec`;
+  if (remainder === 0) return `${minutes} min`;
+  return `${minutes} min ${remainder} sec`;
+}
+
+async function refreshTripEstimate() {
+  const requestId = ++tripEstimateRequestId;
+  const timeElement = document.getElementById('tripTime');
+  const costElement = document.getElementById('tripCost');
+  if (!timeElement || !costElement) return;
+
+  costElement.textContent = '';
+
+  if (items.length === 0) {
+    timeElement.textContent = 'Add items to see trip estimates.';
+    return;
+  }
+
+  if (!apiOnline) {
+    timeElement.textContent = 'Trip estimates are available when connected.';
+    return;
+  }
+
+  timeElement.textContent = 'Updating trip estimates…';
+
+  try {
+    const response = await fetch('/api/trip-estimate');
+    if (!response.ok) throw new Error('Could not load trip estimate.');
+
+    const estimate = await response.json();
+    if (requestId !== tripEstimateRequestId) return;
+
+    if (estimate.itemCount === 0) {
+      timeElement.textContent = 'Add items to see trip estimates.';
+      return;
+    }
+
+    if (estimate.totalSeconds === null) {
+      timeElement.textContent =
+        `Trip time unavailable. ${estimate.timeUnavailableReason}`;
+    } else {
+      const total = formatTripDuration(estimate.totalSeconds);
+      const walking = formatTripDuration(estimate.walkingSeconds);
+      const checkout = formatTripDuration(estimate.checkoutSeconds);
+      timeElement.textContent =
+        `Estimated trip time: ${total} (${walking} walking + ${checkout} checkout)`;
+    }
+
+    const subtotal = tripCurrency.format(estimate.subtotalCents / 100);
+    const missing = estimate.unpricedItems.join(', ');
+
+    if (estimate.pricedItemCount === 0) {
+      costElement.textContent = `No demo prices available for ${missing}.`;
+    } else if (missing) {
+      costElement.textContent =
+        `Demo subtotal for priced items: ${subtotal} before tax. Missing prices for ${missing}.`;
+    } else {
+      costElement.textContent = `Estimated demo subtotal: ${subtotal} before tax.`;
+    }
+  } catch {
+    if (requestId !== tripEstimateRequestId) return;
+    timeElement.textContent = 'Could not load trip estimates. Refresh to try again.';
+  }
+}
+
 function renderList() {
   const ul = document.getElementById('shoppingList');
   ul.innerHTML = '';
+
   items.forEach((item) => {
     const li = document.createElement('li');
     li.className = 'list-item' + (item.detected ? ' detected' : '');
@@ -114,6 +190,7 @@ function renderList() {
     const statusLabel = item.checked ? 'Picked up' : 'Not picked up';
     const statusClass = item.checked ? 'fulfilled' : 'pending';
     const aisleLabel = item.aisle || 'N/A';
+
     li.innerHTML = `
       <div class="item-check ${item.checked ? 'checked' : ''}" data-action="toggle" data-id="${item.id}"></div>
       <span class="item-name ${item.checked ? 'strikethrough' : ''}">${item.name}</span>
@@ -123,14 +200,18 @@ function renderList() {
     `;
     ul.appendChild(li);
   });
+
   ul.querySelectorAll('[data-action="toggle"]').forEach((el) => {
     el.addEventListener('click', () => toggleCheck(Number(el.dataset.id)));
   });
+
   ul.querySelectorAll('[data-action="delete"]').forEach((el) => {
     el.addEventListener('click', () => deleteItem(Number(el.dataset.id)));
   });
+
   updateCount();
   saveItems();
+  void refreshTripEstimate();
 }
 
 function updateCount() {
@@ -154,6 +235,7 @@ async function addItem() {
         body: JSON.stringify({ name }),
       });
       if (!r.ok) throw new Error('post failed');
+
       await loadFromServer();
       input.value = '';
       renderList();
@@ -183,6 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('itemInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addItem();
   });
+
   document.getElementById('addBtn').addEventListener('click', () => addItem());
   document.getElementById('clearPickedBtn').addEventListener('click', () => clearChecked());
   document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer());
@@ -221,6 +304,7 @@ async function toggleCheck(id) {
         body: JSON.stringify({ status }),
       });
       if (!r.ok) throw new Error('patch failed');
+
       await loadFromServer();
       renderList();
       return;
@@ -239,6 +323,7 @@ async function deleteItem(id) {
     try {
       const r = await fetch(`/api/items/${id}`, { method: 'DELETE' });
       if (!r.ok) throw new Error('delete failed');
+
       await loadFromServer();
       renderList();
       return;
@@ -247,12 +332,14 @@ async function deleteItem(id) {
       return;
     }
   }
+
   items = items.filter((i) => i.id !== id);
   renderList();
 }
 
 async function clearChecked() {
   const toRemove = items.filter((i) => i.checked);
+
   if (apiOnline) {
     try {
       for (const i of toRemove) {
@@ -262,15 +349,18 @@ async function clearChecked() {
     } catch {
       alert('Some items could not be removed. Refreshing the checklist.');
     }
+
     await refreshFromServer();
     return;
   }
+
   items = items.filter((i) => !i.checked);
   renderList();
 }
 
 async function refreshFromServer() {
   if (!apiOnline) return;
+
   try {
     await loadFromServer();
     renderList();
@@ -284,11 +374,13 @@ function saveItems() {
 }
 
 window.appItems = () => items;
+
 window.markDetected = async (name) => {
   const item = items.find((i) => i.name.toLowerCase() === name.toLowerCase());
   if (item && !item.checked) {
     item.detected = true;
     item.checked = true;
+
     if (apiOnline) {
       try {
         await fetch(`/api/items/${item.id}`, {
@@ -300,6 +392,7 @@ window.markDetected = async (name) => {
         /* ignore */
       }
     }
+
     renderList();
   }
 };
