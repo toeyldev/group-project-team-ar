@@ -4,6 +4,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { orderChecklist } from './checklistOrdering.js';
+import { estimateTrip } from './tripEstimate.js';
 import {
   deleteItem,
   ensureSchema,
@@ -85,6 +86,17 @@ app.delete('/api/items/:id', async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+app.get('/api/trip-estimate', async (_req, res) => {
+  try {
+    const items = await listItems();
+    res.set('Cache-Control', 'no-store');
+    res.json(estimateTrip(items));
+  } catch (error) {
+    console.error('Could not calculate trip estimate:', error);
+    res.status(500).json({ error: 'Could not calculate trip estimate.' });
+  }
 });
 
 app.get('/', (_req, res) => {
