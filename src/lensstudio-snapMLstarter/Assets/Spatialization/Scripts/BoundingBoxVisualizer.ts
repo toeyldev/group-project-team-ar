@@ -56,6 +56,11 @@ export class BoundingBoxVisualizer extends BaseScriptComponent {
   uvOffset: vec2 = new vec2(0, 0)
 
   @input
+  @allowUndefined
+  @hint("GroceryListController script; when set, only unchecked checklist items get a box")
+  checklist: ScriptComponent
+
+  @input
   @hint("Log box placement to console")
   debugLogging: boolean = false
 
@@ -65,6 +70,8 @@ export class BoundingBoxVisualizer extends BaseScriptComponent {
   private lastSeen: number[] = []
   private cropRect: Rect = Rect.create(-1, 1, -1, 1)
   private isReady: boolean = false
+  private checklistUnavailable: boolean = false
+  private lastWanted = new Map<string, boolean>()
 
   onAwake(): void {
     this.createEvent("OnStartEvent").bind(() => this.onStart())
@@ -130,7 +137,8 @@ export class BoundingBoxVisualizer extends BaseScriptComponent {
   /**
    * Place one box per detection, in score order
    */
-  private onDetections(detections: Detection[]): void {
+  private onDetections(allDetections: Detection[]): void {
+    const detections = allDetections.filter((detection) => this.isWanted(detection.label))
     if (!this.isReady || detections.length === 0) {
       return
     }
@@ -202,15 +210,50 @@ export class BoundingBoxVisualizer extends BaseScriptComponent {
    * PinholeCapture expects full camera frame UVs with v pointing up
    */
   private project(u: number, v: number): vec3 {
+    return this.pinholeCapture.captureToWorldTransform(this.cropUVToCaptureUV(u, v), this.boxDepth)
+  }
+
+  /**
+   * Map a detection UV (cropped model input, v down) to a full camera frame UV (v up),
+   * the space PinholeCapture and PinholeCameraModel work in
+   */
+  public cropUVToCaptureUV(u: number, v: number): vec2 {
     // Crop rect is in [-1, 1] local space with y pointing up
     const x = this.cropRect.left + u * (this.cropRect.right - this.cropRect.left)
     const y = this.cropRect.top - v * (this.cropRect.top - this.cropRect.bottom)
 
-    const uv = new vec2(
+    return new vec2(
       Math.max(0, Math.min(1, ((x + 1) / 2) * this.uvScale.x + this.uvOffset.x)),
       Math.max(0, Math.min(1, ((y + 1) / 2) * this.uvScale.y + this.uvOffset.y))
     )
-    return this.pinholeCapture.captureToWorldTransform(uv, this.boxDepth)
+  }
+
+  /**
+   * Whether a detection gets a box: with a checklist set, only labels matching an unchecked item.
+   * Falls back to showing every box (and says why, once) if the checklist cannot be queried.
+   */
+  private isWanted(label: string): boolean {
+    if (!this.checklist || this.checklistUnavailable) {
+      return true
+    }
+    const hooks = this.checklist as unknown as {findUncheckedByName?: (name: string) => unknown}
+    if (typeof hooks.findUncheckedByName !== "function") {
+      this.checklistUnavailable = true
+      print("[BoundingBoxVisualizer] checklist has no findUncheckedByName - showing all boxes")
+      return true
+    }
+    try {
+      const wanted = hooks.findUncheckedByName(label) !== null
+      if (this.debugLogging && this.lastWanted.get(label) !== wanted) {
+        this.lastWanted.set(label, wanted)
+        print(`[BoundingBoxVisualizer] ${label}: ${wanted ? "showing (unchecked on list)" : "hidden (not on list or checked)"}`)
+      }
+      return wanted
+    } catch (e) {
+      this.checklistUnavailable = true
+      print("[BoundingBoxVisualizer] checklist query failed - showing all boxes: " + e)
+      return true
+    }
   }
 
   private sizeChanged(previous: vec2, current: vec2): boolean {

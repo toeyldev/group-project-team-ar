@@ -25,7 +25,10 @@ var BAR_GAP = 0.5;
 var mockItems = [
   { id: 1, name: "Milk", checked: false },
   { id: 2, name: "Eggs", checked: true },
-  { id: 3, name: "Bread", checked: false }
+  { id: 3, name: "Bread", checked: false },
+  // COCO class names, so auto check-off can be tried in mock mode
+  { id: 4, name: "Bottle", checked: false },
+  { id: 5, name: "Cup", checked: false }
 ];
 
 function displayMessage(message) {
@@ -312,6 +315,35 @@ async function onRowToggled(pinchRow) {
     updateHeader(currentItems());
   }
 }
+
+function normalizeName(name) {
+  return String(name || "").trim().toLowerCase();
+}
+
+// Used by AutoCheckOff: the unchecked row whose name matches a detection label, or null
+script.findUncheckedByName = function(name) {
+  var wanted = normalizeName(name);
+  for (var i = 0; i < rowOrder.length; i++) {
+    var id = rowOrder[i];
+    var pinchRow = rows[id].pinchRow;
+    if (!pinchRow.checked && !pendingIds[id] && normalizeName(pinchRow.itemName) === wanted) {
+      return { id: id, name: pinchRow.itemName };
+    }
+  }
+  return null;
+};
+
+// Used by AutoCheckOff: check a row off through the same path as a pinch
+script.autoCheck = function(id) {
+  var row = rows[id];
+  if (!row || row.pinchRow.checked || pendingIds[id]) {
+    return false;
+  }
+  row.pinchRow.setChecked(true);
+  onRowToggled(row.pinchRow);
+  print("GroceryListController auto-checked " + row.pinchRow.itemName);
+  return true;
+};
 
 function scheduleNextPoll() {
   var event = script.createEvent("DelayedCallbackEvent");
