@@ -38,6 +38,7 @@ AisleVision is an Augmented Reality (AR) grocery assistant designed for Snap Spe
   - The checklist is shown in the AR view as one row per item with a progress bar and percentage.
   - User can pinch to check items off the checklist.
   - The aisle number of the checklist is displayed.
+  - Auto check-off: when the user's hand touches a detected item that is on the list, a 5-second countdown starts and then the item is checked off. Holding an open palm toward the glasses cancels it. The "Auto check-off" toggle above the checklist turns the feature on or off (on by default).
 - **Path Planning:**
   - 2D store-map data collection and an A* pathfinding algorithm with unit tests (branch: `feature/2d-path-planning`).
 
