@@ -1,0 +1,92 @@
+- !<AssetImportMetadata/a51adf65-83fa-42b4-8453-854672d8390c>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 4c5ecca1-91b8-4bb5-8eff-544d3041dd12
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 4c5ecca1-91b8-4bb5-8eff-544d3041dd12
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 691d75fb-f76f-4c2c-9f8b-9a46ad314d2b
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/691d75fb-f76f-4c2c-9f8b-9a46ad314d2b>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: 1632f6b0-a197-45c1-9c53-0daa30d00d3d
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    boxPadding: false
+    boxVisualizer: false
+    bufferSeconds: false
+    checklist: false
+    cooldownSeconds: false
+    debugLogging: false
+    detectionMemorySeconds: false
+    enabledAtStart: false
+    maxReach: false
+    minReach: false
+    mlSpatializer: false
+    openHandLength: false
+    palmHoldSeconds: false
+    pinholeCapture: false
+    promptText: false
+    toggle: false
+    touchHoldSeconds: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - mlSpatializer: !<MappingBased.AssignableType> 00000000-0000-0000-0000-000000000000
+      pinholeCapture: !<MappingBased.AssignableType_1> 00000000-0000-0000-0000-000000000000
+      boxVisualizer: !<MappingBased.AssignableType_2> 00000000-0000-0000-0000-000000000000
+      checklist: !<reference.ScriptComponent> 00000000-0000-0000-0000-000000000000
+      promptText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      toggle: !<MappingBased.AssignableType_3> 00000000-0000-0000-0000-000000000000
+      enabledAtStart: true
+      bufferSeconds: !<float> 5.000000
+      touchHoldSeconds: 0.300000
+      detectionMemorySeconds: 0.500000
+      minReach: !<float> 15.000000
+      maxReach: !<float> 75.000000
+      boxPadding: 0.050000
+      palmHoldSeconds: 0.500000
+      openHandLength: !<float> 12.000000
+      cooldownSeconds: !<float> 10.000000
+      debugLogging: false
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input AssignableType mlSpatializer {"hint":"MLSpatializer that emits detection updates"}'
+    - '// @input AssignableType_1 pinholeCapture {"hint":"PinholeCapture used to project hand joints into the camera image"}'
+    - '// @input AssignableType_2 boxVisualizer {"hint":"BoundingBoxVisualizer, used for its detection-to-camera UV mapping"}'
+    - '// @input Component.ScriptComponent checklist {"hint":"The GroceryListController script component"}'
+    - '// @input Component.Text promptText {"hint":"Text that shows the countdown and result"}'
+    - '// @input AssignableType_3 toggle {"hint":"Toggleable UIKit button that turns the feature on and off"}'
+    - '// @input bool enabledAtStart = true {"hint":"Whether auto check-off is on when the lens starts"}'
+    - '// @input float bufferSeconds = 5 {"hint":"Seconds the user has to cancel before the item is checked off", "widget":"slider", "min":1, "max":10, "step":0.5}'
+    - '// @input float touchHoldSeconds = 0.3 {"hint":"Seconds the hand must stay on the item before the countdown starts", "widget":"slider", "min":0, "max":2, "step":0.05}'
+    - '// @input float detectionMemorySeconds = 0.5 {"hint":"Seconds an item stays touchable after it was last detected (the hand can hide it)", "widget":"slider", "min":0, "max":2, "step":0.05}'
+    - '// @input float minReach = 15 {"hint":"Closest a hand joint can be to the camera (cm) and still count as touching"}'
+    - '// @input float maxReach = 75 {"hint":"Farthest a hand joint can be from the camera (cm) and still count as touching"}'
+    - '// @input float boxPadding = 0.05 {"hint":"Extra margin around each detection box, in camera UV units", "widget":"slider", "min":0, "max":0.2, "step":0.01}'
+    - '// @input float palmHoldSeconds = 0.5 {"hint":"Seconds an open palm must face the glasses to cancel", "widget":"slider", "min":0.1, "max":2, "step":0.05}'
+    - '// @input float openHandLength = 12 {"hint":"Minimum wrist-to-middle-fingertip distance (cm) for the hand to count as open"}'
+    - '// @input float cooldownSeconds = 10 {"hint":"Seconds before a cancelled item can trigger again"}'
+    - '// @input bool debugLogging {"hint":"Log touches and countdown changes"}'
