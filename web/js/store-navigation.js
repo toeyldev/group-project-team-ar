@@ -2,15 +2,11 @@
 (() => {
   const NS = 'http://www.w3.org/2000/svg';
   let svg, plan, routeLayer, view, drag, revision = 0;
-  const POSITION_KEY = 'av_target_trip_position_v1';
+  // The server saves the position when any client (website or glasses) marks an item picked up.
+  // This copy follows the X-Trip-Start-Aisle header on each checklist load.
   let startAisle = null;
-  try {
-    const stored = JSON.parse(localStorage.getItem(POSITION_KEY) || 'null');
-    if (stored?.store === 'target-san-jose-west' && typeof stored.aisle === 'string' && stored.aisle.trim().length <= 40) startAisle = stored.aisle.trim().toUpperCase() || null;
-  } catch { /* Storage may be disabled; position remains available in memory. */ }
   function savePosition(aisle) {
     startAisle = aisle;
-    try { localStorage.setItem(POSITION_KEY, JSON.stringify({ store: 'target-san-jose-west', aisle })); } catch { /* In-memory fallback. */ }
   }
   let pickupQueue = Promise.resolve(), tripRevision = 0;
   function showStart(start) {
@@ -99,6 +95,15 @@
   }
   window.StoreNavigation = {
     getStartAisle: () => startAisle,
+    // Adopt the server's position; returns true when it changed so the route is redrawn.
+    syncStart(aisle) {
+      const next = typeof aisle === 'string' && aisle.trim() && aisle.trim().length <= 40
+        ? aisle.trim().toUpperCase() : null;
+      if (next === startAisle) return false;
+      savePosition(next);
+      ++revision; // Invalidate any route calculated from the old position.
+      return true;
+    },
     // Serialize successful pickup events; display order never determines position.
     recordPickup(aisle) {
       const trip = tripRevision;
@@ -122,6 +127,9 @@
       savePosition(null);
       routeLayer?.replaceChildren();
       if (plan?.entrance) showStart({ aisle: null, point: plan.entrance });
+      return fetch('/api/trip', { method: 'DELETE' })
+        .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); })
+        .catch(error => console.error('Could not reset the trip on the server:', error));
     },
     async update(items, onRoute) {
       const version = ++revision;
@@ -133,10 +141,8 @@
         if (version !== revision) return;
         const route = await requestRoute(items.filter(item => !item.checked).map(item => item.aisle ?? null));
         if (version !== revision) return;
-        if (route.start) {
-          if (route.start.aisle !== startAisle) savePosition(route.start.aisle);
-          showStart(route.start);
-        }
+        // Keep the server's position as is; the route already falls back to the entrance if it is unknown.
+        if (route.start) showStart(route.start);
         routeLayer.replaceChildren();
         if (route.path.length > 1) {
           const points = route.path.map(point => point.join(',')).join(' ');

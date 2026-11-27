@@ -41,6 +41,28 @@ export async function ensureSchema(): Promise<void> {
       KEY idx_grocery_items_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  // One row holds the shopper's position so the glasses and website route from the same place.
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS trip_position (
+      id TINYINT UNSIGNED NOT NULL,
+      aisle VARCHAR(40) NULL,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+/** The aisle of the last picked-up item, or null when the trip starts at the entrance. */
+export async function getTripPosition(): Promise<string | null> {
+  const [rows] = await pool.execute<mysql.RowDataPacket[]>('SELECT aisle FROM trip_position WHERE id = 1');
+  const aisle = rows[0]?.aisle;
+  return typeof aisle === 'string' && aisle ? aisle : null;
+}
+
+export async function setTripPosition(aisle: string | null): Promise<void> {
+  await pool.execute(
+    'INSERT INTO trip_position (id, aisle) VALUES (1, ?) ON DUPLICATE KEY UPDATE aisle = VALUES(aisle)',
+    [aisle]
+  );
 }
 
 export async function pingDb(): Promise<void> {
