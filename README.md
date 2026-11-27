@@ -325,6 +325,62 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\test-api.ps1
 
 ---
 
+## Backend API tests (no Spectacles required)
+
+Testers can exercise the Node/Express API without Spectacles hardware. They need
+Node.js, MySQL Server, and a local `aislevision` database.
+
+1. Start the installed MySQL Windows service from PowerShell. Replace `MySQL97`
+   with the service name installed on your machine:
+
+   ```powershell
+   Get-Service | Where-Object {$_.Name -like "MySQL*"}
+   Start-Service -Name MySQL97
+   ```
+
+2. If needed, open `server\mysql\workbench_setup.sql` in MySQL Workbench and run
+   it against the local MySQL server. Set the existing MySQL credentials in
+   `server\.env`, using `server\.env.example` as a template. Do not commit
+   `server\.env`.
+3. In the first PowerShell window, start the API:
+
+   ```powershell
+   Set-Location server
+   npm install
+   npm run dev
+   ```
+
+4. In a second PowerShell window at the repository root, run the API test
+   script at `tests\test-api.ps1`:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\test-api.ps1
+   ```
+
+   The test checks the MySQL-backed health route, lists items, creates a
+   uniquely named temporary grocery item, verifies it appears in the list,
+   checks and unchecks it, then deletes it and confirms it is gone. Existing
+   grocery items are not cleared. A successful run prints `All 11 API checks
+   passed (express).`
+
+The shared test script also detects the FastAPI backend on port 8000, and
+accepts a non-default API URL:
+
+```powershell
+$env:API_BASE_URL = "http://localhost:3000"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\test-api.ps1
+```
+
+The `npm --prefix server run test:api` command is also available as a shorthand
+for running the script from the server package.
+
+The API server must remain running in the first window while tests execute.
+The web page is available at `http://localhost:3000/app.html`. Add supported
+items from the dropdown; changes made on the glasses appear automatically
+within a few seconds, and **Refresh now** remains available for manual sync.
+
+---
+
 ## What's Next (Before Project Expo)
 **Object detection and checklist:**
 - Connect detection to the checklist: When the user picks up an item and their hand touches the item's bounding box, the item checks itself off the list automatically.

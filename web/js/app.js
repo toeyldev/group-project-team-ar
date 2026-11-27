@@ -1,9 +1,21 @@
 const LS_KEY = 'av_items';
 const LS_NEXT = 'av_nextId';
+const SERVER_SYNC_INTERVAL_MS = 2500;
+// The server's list replaces this browser's list when it reconnects, so offline edits are not kept.
+const OFFLINE_MESSAGE = 'Offline: this change is saved only in this browser and will be replaced by the server list when it reconnects.';
 
 let items = [];
 let nextId = 1;
 let apiOnline = false;
+let refreshInProgress = false;
+let serverMutationInProgress = false;
+
+function setStatus(message, isError = false) {
+  const appStatus = document.getElementById('appStatus');
+  if (!appStatus) return;
+  if (appStatus.textContent !== message) appStatus.textContent = message;
+  appStatus.classList.toggle('error', isError);
+}
 
 const AISLES_BY_ITEM = {
   'cup': 'E80',
@@ -78,9 +90,27 @@ async function loadFromServer() {
   const r = await fetch('/api/items' + (from ? `?startAisle=${encodeURIComponent(from)}` : ''));
   if (!r.ok) throw new Error('failed to load items');
   const rows = await r.json();
-  items = rows.map(serverRowToClient);
-  nextId = items.length ? Math.max(...items.map((i) => i.id)) + 1 : 1;
-  saveItems();
+  const detectedById = new Map(items.map((item) => [item.id, item.detected]));
+  const nextItems = rows.map((row) => {
+    const item = serverRowToClient(row);
+    item.detected = detectedById.get(item.id) || false;
+    return item;
+  });
+  const changed = nextItems.length !== items.length || nextItems.some((item, index) => {
+    const current = items[index];
+    return !current
+      || current.id !== item.id
+      || current.name !== item.name
+      || current.aisle !== item.aisle
+      || current.checked !== item.checked
+      || current.detected !== item.detected;
+  });
+  nextId = nextItems.length ? Math.max(...nextItems.map((item) => item.id)) + 1 : 1;
+  if (changed) {
+    items = nextItems;
+    saveItems();
+  }
+  return changed;
 }
 
 function loadLocalOnly() {
@@ -157,17 +187,15 @@ function updateCount() {
     total === 0 ? '0 items' : `${done}/${total} picked up`;
 }
 
-async function addItem() {
-  const input = document.getElementById('itemInput');
-  const raw = input.value.trim();
-  if (!raw) return;
-  if (!isActiveItem({ name: raw })) {
-    alert('This item is unavailable because its aisle is not mapped. Choose another item.');
+async function addItem(name) {
+  // Every dropdown item has a mapped aisle, so this also rejects stale or hidden values.
+  if (typeof name !== 'string' || !aisleForItem(name) || !isActiveItem({ name })) {
+    setStatus('Choose an item from the menu.', true);
     return;
   }
-  const name = raw.charAt(0).toUpperCase() + raw.slice(1);
 
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
       const r = await fetch('/api/items', {
         method: 'POST',
@@ -176,35 +204,31 @@ async function addItem() {
       });
       if (!r.ok) throw new Error('post failed');
       await loadFromServer();
-      input.value = '';
       renderList();
+      setStatus(`${name} added. Changes from glasses sync automatically.`);
       return;
-    } catch {
-      alert('Could not add or refresh the checklist. Refresh before retrying.');
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not add ${name}: ${error.message}`, true);
       return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
 
   items.push({ id: nextId++, name, aisle: aisleForItem(name), checked: false, detected: false });
   localStorage.setItem(LS_NEXT, String(nextId));
-  input.value = '';
   renderList();
+  setStatus(OFFLINE_MESSAGE, true);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('commonItemSelect').addEventListener('change', (e) => {
-    const sel = e.target;
-    const v = sel.value;
-    if (!v || !isActiveItem({ name: v })) return;
-    document.getElementById('itemInput').value = v;
-    sel.selectedIndex = 0;
-    document.getElementById('itemInput').focus();
+  const commonItemSelect = document.getElementById('commonItemSelect');
+  commonItemSelect.addEventListener('change', () => {
+    const name = commonItemSelect.value;
+    commonItemSelect.selectedIndex = 0;
+    if (name) return addItem(name);
   });
-
-  document.getElementById('itemInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addItem();
-  });
-  document.getElementById('addBtn').addEventListener('click', () => addItem());
   document.getElementById('clearPickedBtn').addEventListener('click', () => clearChecked());
   document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer());
   document.getElementById('newTrip').addEventListener('click', () => {
@@ -230,6 +254,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   renderList();
+  setStatus(
+    apiOnline
+      ? 'Connected. Changes from glasses update automatically.'
+      : 'Server unavailable. Showing this browser’s saved list; changes will not reach glasses.',
+    !apiOnline
+  );
+  window.setInterval(() => {
+    if (document.visibilityState !== 'hidden') refreshFromServer();
+  }, SERVER_SYNC_INTERVAL_MS);
 });
 
 async function toggleCheck(id, detected = false) {
@@ -239,6 +272,7 @@ async function toggleCheck(id, detected = false) {
   const status = newChecked ? 'picked_up' : 'not_picked_up';
 
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
       const r = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
@@ -254,9 +288,12 @@ async function toggleCheck(id, detected = false) {
       }
       renderList();
       return;
-    } catch {
-      alert('Could not update or refresh the checklist. Refresh before retrying.');
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not update ${item.name}: ${error.message}`, true);
       return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
 
@@ -264,51 +301,75 @@ async function toggleCheck(id, detected = false) {
   if (detected) item.detected = true;
   if (newChecked) await window.StoreNavigation?.recordPickup(item.aisle);
   renderList();
+  setStatus(OFFLINE_MESSAGE, true);
 }
 
 async function deleteItem(id) {
-  if (!activeItems().some(item => item.id === id)) return;
+  const item = activeItems().find((current) => current.id === id);
+  if (!item) return;
+
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
       const r = await fetch(`/api/items/${id}`, { method: 'DELETE' });
       if (!r.ok) throw new Error('delete failed');
       await loadFromServer();
       renderList();
       return;
-    } catch {
-      alert('Could not delete or refresh the checklist. Refresh before retrying.');
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not remove ${item.name}: ${error.message}`, true);
       return;
+    } finally {
+      serverMutationInProgress = false;
     }
   }
   items = items.filter((i) => i.id !== id);
   renderList();
+  setStatus(OFFLINE_MESSAGE, true);
 }
 
 async function clearChecked() {
   const toRemove = activeItems().filter((i) => i.checked);
   if (apiOnline) {
+    serverMutationInProgress = true;
     try {
-      for (const i of toRemove) {
-        const r = await fetch(`/api/items/${i.id}`, { method: 'DELETE' });
-        if (!r.ok) throw new Error('delete failed');
+      for (const item of toRemove) {
+        const r = await fetch(`/api/items/${item.id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`delete failed for ${item.name}`);
       }
-    } catch {
-      alert('Some items could not be removed. Refreshing the checklist.');
+      await loadFromServer();
+      renderList();
+      return;
+    } catch (error) {
+      apiOnline = false;
+      setStatus(`Could not remove all picked-up items: ${error.message}`, true);
+      return;
+    } finally {
+      serverMutationInProgress = false;
     }
-    await refreshFromServer();
-    return;
   }
   items = items.filter((i) => !i.checked || !isActiveItem(i));
   renderList();
+  setStatus(OFFLINE_MESSAGE, true);
 }
 
 async function refreshFromServer() {
-  if (!apiOnline) return;
+  if (refreshInProgress || serverMutationInProgress) return;
+  refreshInProgress = true;
   try {
-    await loadFromServer();
-    renderList();
-  } catch {
+    if (!apiOnline) {
+      apiOnline = await tryHealth();
+      if (!apiOnline) throw new Error('Checklist server is unavailable');
+    }
+    const changed = await loadFromServer();
+    if (changed) renderList();
+    setStatus('Connected. Changes from glasses update automatically.');
+  } catch (error) {
     apiOnline = false;
+    setStatus(`Unable to sync with the server: ${error.message}`, true);
+  } finally {
+    refreshInProgress = false;
   }
 }
 

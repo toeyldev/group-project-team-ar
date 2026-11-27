@@ -1,6 +1,6 @@
 //@input Component.Text groceryText
 //@input Asset.InternetModule internetModule
-//@input string apiUrl = "http://127.0.0.1:8000/api/lists/demo/items"
+//@input string apiUrl = "http://127.0.0.1:3000/api/items"
 //@input bool mockMode = false
 
 var POLL_INTERVAL_SECONDS = 5;
@@ -26,22 +26,25 @@ function displayMessage(message) {
 }
 
 function formatChecklist(data) {
-  var items = data.items;
+  var items = Array.isArray(data) ? data : data && data.items;
   if (!Array.isArray(items)) {
     throw new Error("API response is missing the items array");
   }
 
-  var completed = typeof data.completed === "number"
+  var completed = data && typeof data.completed === "number"
     ? data.completed
-    : items.filter(function(item) { return item.checked === true; }).length;
-  var total = typeof data.total === "number" ? data.total : items.length;
+    : items.filter(function(item) {
+      return item.checked === true || item.status === "picked_up";
+    }).length;
+  var total = data && typeof data.total === "number" ? data.total : items.length;
   var lines = ["Grocery List"];
 
   if (items.length === 0) {
     lines.push("No items yet.");
   } else {
     items.forEach(function(item) {
-      lines.push((item.checked ? "[x] " : "[ ] ") + item.name);
+      var checked = item.checked === true || item.status === "picked_up";
+      lines.push((checked ? "[x] " : "[ ] ") + item.name);
     });
   }
   lines.push("");
@@ -92,6 +95,11 @@ async function pollChecklist() {
     var response = await internetModule.fetch(script.apiUrl);
     print("Grocery list API HTTP status: " + response.status);
     if (response.status < 200 || response.status >= 300) {
+      if (response.status === 1) {
+        throw new Error(
+          "HTTP 1: Could not reach the API. Check the URL and server; Spectacles need an HTTPS tunnel URL ending in /api/items."
+        );
+      }
       throw new Error("HTTP " + response.status);
     }
 

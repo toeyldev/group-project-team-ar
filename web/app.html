@@ -26,10 +26,10 @@
       </div>
     </div>
 
-    <div class="quick-pick-row">
-      <label class="visually-hidden" for="commonItemSelect">Pick an item</label>
-      <select id="commonItemSelect" class="common-item-select" title="Pick an item to fill the box below">
-        <option value="">Pick an item…</option>
+    <div class="add-row">
+      <label class="visually-hidden" for="commonItemSelect">Choose an item to add</label>
+      <select id="commonItemSelect" class="item-input common-item-select" title="Choose an item to add">
+        <option value="">Choose an item…</option>
         <option value="Cup">Cup</option>
         <option value="Bottle">Bottle</option>
         <option value="Microwave">Microwave</option>
@@ -67,16 +67,12 @@
       </select>
     </div>
 
-    <div class="add-row">
-      <input type="text" id="itemInput" class="item-input" placeholder="Add an item (e.g. Banana)" autocomplete="off" />
-      <button type="button" class="btn-primary" id="addBtn">Add</button>
-    </div>
-
+    <p class="app-status" id="appStatus" role="status" aria-live="polite"></p>
     <ul class="shopping-list" id="shoppingList"></ul>
 
     <div class="app-actions">
       <button type="button" class="btn-secondary" id="clearPickedBtn">Remove picked up</button>
-      <button type="button" class="btn-secondary btn-strong" id="refreshBtn">Refresh from server</button>
+      <button type="button" class="btn-secondary btn-strong" id="refreshBtn">Refresh now</button>
     </div>
   </div>
   <section class="app-card map-card" aria-labelledby="mapTitle">

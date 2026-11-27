@@ -43,9 +43,9 @@ test('browser fallback demo products are supported by the current floor plan', (
 
 for (const online of [false, true]) {
   test(`website adds all 34 active products and supports check/uncheck/delete/refresh (${online ? 'API' : 'offline'})`, async () => {
-    type Element = { value: string; innerHTML: string; textContent: string; selectedIndex: number; dataset: Record<string, unknown>; children: Element[]; listeners: Record<string, (event?: unknown) => unknown>; addEventListener(type: string, fn: (event?: unknown) => unknown): void; focus(): void; appendChild(child: Element): void; querySelectorAll(): never[] };
+    type Element = { value: string; classList: { toggle(): void }; innerHTML: string; textContent: string; selectedIndex: number; dataset: Record<string, unknown>; children: Element[]; listeners: Record<string, (event?: unknown) => unknown>; addEventListener(type: string, fn: (event?: unknown) => unknown): void; focus(): void; appendChild(child: Element): void; querySelectorAll(): never[] };
     const elements = new Map<string, Element>();
-    const makeElement = (): Element => ({ value: '', innerHTML: '', textContent: '', selectedIndex: 0, dataset: {}, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, focus() {}, appendChild(child) { this.children.push(child); }, querySelectorAll() { return []; } });
+    const makeElement = (): Element => ({ value: '', classList: { toggle() {} }, innerHTML: '', textContent: '', selectedIndex: 0, dataset: {}, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, focus() {}, appendChild(child) { this.children.push(child); }, querySelectorAll() { return []; } });
     const element = (id: string) => { if (!elements.has(id)) elements.set(id, makeElement()); return elements.get(id)!; };
     let ready: () => Promise<void> = async () => {};
     const hiddenRows = Object.entries(expected).filter(([name]) => removed.has(name.toLowerCase())).map(([name, aisle], i) => ({
@@ -60,7 +60,7 @@ for (const online of [false, true]) {
     let nextId = 2;
     const storage = new Map([['av_items', JSON.stringify([{ id: 1, name: 'Banana', aisle: 'B9', checked: false, detected: false }, ...hiddenLocal])], ['av_nextId', '2']]);
     const context = vm.createContext({
-      window: { StoreNavigation: {
+      window: { setInterval() {}, StoreNavigation: {
         getStartAisle: () => 'D27', recordPickup() {}, resetTrip() {},
         update(items: { name: string; aisle: string; checked: boolean }[], callback: any) {
           routeInputs.push(structuredClone(items));
@@ -84,11 +84,9 @@ for (const online of [false, true]) {
     assert.equal(vm.runInContext('items[0].aisle', context), 'B49', 'old local Banana aisle is corrected');
     for (const [name, aisle] of Object.entries(activeExpected)) {
       element('commonItemSelect').value = name;
-      element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
-      assert.equal(element('itemInput').value, name);
+      element('commonItemSelect').selectedIndex = 1;
+      await element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
       assert.equal(element('commonItemSelect').selectedIndex, 0);
-      await vm.runInContext('addItem()', context);
-      assert.equal(element('itemInput').value, '');
       assert.equal(vm.runInContext(`items.findLast(item => item.name === ${JSON.stringify(name)}).aisle`, context), aisle);
       assert.ok(element('shoppingList').children.some(child => child.innerHTML.includes(`Aisle ${aisle}`)));
     }
@@ -105,18 +103,17 @@ for (const online of [false, true]) {
     await vm.runInContext('toggleCheck(2);', context);
     await vm.runInContext('clearChecked()', context);
     assert.equal(vm.runInContext('activeItems().length', context), 33);
-    // Typed names and stale dropdown values cannot reintroduce the hidden products.
+    // Direct calls and stale dropdown values cannot reintroduce the hidden products.
     const count = vm.runInContext('items.length', context);
     const posts = requests.filter(request => request.method === 'POST').length;
     for (const name of removed) {
-      element('itemInput').value = ` ${name.toUpperCase()} `;
-      await vm.runInContext('addItem()', context);
+      await vm.runInContext(`addItem(${JSON.stringify(` ${name.toUpperCase()} `)})`, context);
+      assert.equal(element('appStatus').textContent, 'Choose an item from the menu.');
       element('commonItemSelect').value = name;
-      element('itemInput').value = '';
-      element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
-      assert.equal(element('itemInput').value, '');
+      await element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
+      assert.equal(element('appStatus').textContent, 'Choose an item from the menu.');
     }
-    assert.equal(alerts.length, 8);
+    assert.equal(alerts.length, 0);
     assert.equal(vm.runInContext('items.length', context), count);
     assert.equal(requests.filter(request => request.method === 'POST').length, posts);
     for (const row of hiddenBefore) {

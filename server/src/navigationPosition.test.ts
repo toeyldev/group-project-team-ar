@@ -31,7 +31,7 @@ test('A* routes from entrance then E66 and D27, with matching checklist order an
 });
 
 class Node {
-  attrs: Record<string, any> = {}; children: Node[] = []; dataset = {}; value = ''; textContent = ''; innerHTML = ''; className = '';
+  attrs: Record<string, any> = {}; children: Node[] = []; dataset = {}; classList = { toggle() {} }; value = ''; textContent = ''; innerHTML = ''; className = '';
   events: Record<string, (...args: any[]) => any> = {};
   setAttribute(key: string, value: any) { this.attrs[key] = value; }
   getAttribute(key: string) { return this.attrs[key]; }
@@ -53,7 +53,7 @@ async function browser(storage = new Map<string, string>()) {
   const rows: GroceryRow[] = ['Wine glass', 'Laptop', 'Mouse', 'Cake', 'Tie', 'Laptop'].map((name, i) => ({
     id: i + 1, name, aisle: ['E66', 'D27', 'D36', 'B39', 'MN50', 'D27'][i], status: 'not_picked_up',
   }));
-  const context = vm.createContext({ console: { error() {} }, window: {}, document: {
+  const context = vm.createContext({ console: { error() {} }, window: { setInterval() {} }, document: {
     getElementById: node, createElement: () => new Node(), createElementNS: () => new Node(),
     addEventListener(_event: string, callback: any) { domReady = callback; },
   }, localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) },
@@ -108,7 +108,7 @@ test('pickup events persist position, reorder from that aisle, and retain it for
   assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
   b.run('apiOnline=false'); // Remaining UI operations need no mocked database mutations.
   await b.run('clearChecked()'); await b.run('deleteItem(1)');
-  b.nodes.itemInput.value = 'Fork'; await b.run('addItem()'); await b.flush();
+  await b.run("addItem('Fork')"); await b.flush();
   assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
   assert.equal([...b.requests].reverse().find(req => req.url === '/api/navigation')!.body.startAisle, 'D27');
   const displayed = JSON.parse(b.run('JSON.stringify(activeItems().filter(i=>!i.checked).map(i=>i.aisle))'));

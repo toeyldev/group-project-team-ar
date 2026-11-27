@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "build": "tsc",
     "migrate:aisles": "tsx src/migrateAisles.ts",
-    "test": "tsx src/pathfinding/testPathfinding.ts && tsx --test src/*.test.ts"
+    "test": "tsx src/pathfinding/testPathfinding.ts && tsx --test src/*.test.ts",
+    "test:api": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\tests\\test-api.ps1"
   },
   "dependencies": {
     "cors": "^2.8.5",

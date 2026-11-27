@@ -342,6 +342,12 @@ async function pollChecklist() {
     var response = await internetModule.fetch(script.apiUrl);
     print("Grocery list API HTTP status: " + response.status);
     if (response.status < 200 || response.status >= 300) {
+      // Status 0 or 1 means no response arrived, usually a wrong URL or a stopped server/tunnel.
+      if (response.status === 0 || response.status === 1) {
+        throw new Error(
+          "HTTP " + response.status + ": Could not reach the API. Check the URL and server; Spectacles need an HTTPS tunnel URL ending in /api/items."
+        );
+      }
       throw new Error("HTTP " + response.status);
     }
 

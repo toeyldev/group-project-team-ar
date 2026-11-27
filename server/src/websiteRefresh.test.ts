@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../web/js/app.js', import.meta.url), 'utf8');
 
-for (const action of ['addItem()', 'toggleCheck(1)', 'toggleCheck(2)', 'deleteItem(1)', 'clearChecked()']) {
+for (const action of ["addItem('Fork')", 'toggleCheck(1)', 'toggleCheck(2)', 'deleteItem(1)', 'clearChecked()']) {
   test(`Node website refreshes server order after ${action}`, async () => {
     const requests: string[] = [];
     const rows = [
@@ -14,7 +14,7 @@ for (const action of ['addItem()', 'toggleCheck(1)', 'toggleCheck(2)', 'deleteIt
     ];
     const context = vm.createContext({
       window: {},
-      document: { addEventListener() {}, getElementById: () => ({ value: 'Fork' }) },
+      document: { addEventListener() {}, getElementById: () => ({ value: 'Fork', classList: { toggle() {} } }) },
       localStorage: { setItem() {} },
       alert: (message: string) => assert.fail(message),
       fetch: async (url: string, options?: { method: string }) => {
