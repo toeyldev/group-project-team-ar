@@ -644,6 +644,7 @@
       checklist: !<reference.ScriptComponent> 92af2a1e-5a6a-4356-9f2d-16fc1c8ea7e6
       promptText: !<reference.Text> 52601762-e5e9-43eb-ad4c-2e4eec176e11
       toggle: !<MappingBased.AssignableType_3> dd9ded46-35a4-428e-9f9d-9c0860d4be19
+      toggleLabel: !<reference.Text> 879da9b8-7fe2-4837-b4a2-8c37b7a77457
       enabledAtStart: true
       bufferSeconds: !<float> 5.000000
       touchHoldSeconds: 0.300000
@@ -3163,7 +3164,7 @@
   Enabled: true
   Layers: 1
   LocalTransform: !<TransformEntity>
-    Position: {x: 0.000000, y: 0.000000, z: 0.000000}
+    Position: {x: 0.000000, y: 0.000000, z: 0.500000}
     Rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
     Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
     HasSegmentScaleCompensation: false
@@ -4318,7 +4319,7 @@
     []
   Name: Text
   Enabled: true
-  RenderOrder: 0
+  RenderOrder: 1
   StretchMode: Stretch
   VerticalAlignment: Center
   HorizontalAlignment: Center
@@ -4330,7 +4331,7 @@
   ShowEditingPreview: true
   TouchHandler: !<reference> 00000000-0000-0000-0000-000000000000
   SizeToFit: false
-  FontSize: 48
+  FontSize: 36
   Font: !<reference> 00000000-0000-0000-0000-000000000000
   LayoutRect:
     left: -7.500000

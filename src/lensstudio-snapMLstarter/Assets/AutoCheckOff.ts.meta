@@ -42,6 +42,7 @@
     pinholeCapture: false
     promptText: false
     toggle: false
+    toggleLabel: false
     touchHoldSeconds: false
   ScriptTypesHidden:
     {}
@@ -58,6 +59,7 @@
       checklist: !<reference.ScriptComponent> 00000000-0000-0000-0000-000000000000
       promptText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       toggle: !<MappingBased.AssignableType_3> 00000000-0000-0000-0000-000000000000
+      toggleLabel: !<reference.Text> 00000000-0000-0000-0000-000000000000
       enabledAtStart: true
       bufferSeconds: !<float> 5.000000
       touchHoldSeconds: 0.300000
@@ -79,6 +81,7 @@
     - '// @input Component.ScriptComponent checklist {"hint":"The GroceryListController script component"}'
     - '// @input Component.Text promptText {"hint":"Text that shows the countdown and result"}'
     - '// @input AssignableType_3 toggle {"hint":"Toggleable UIKit button that turns the feature on and off"}'
+    - '// @input Component.Text toggleLabel {"hint":"Toggle label; shows ON/OFF and turns green or gray with the feature state"}'
     - '// @input bool enabledAtStart = true {"hint":"Whether auto check-off is on when the lens starts"}'
     - '// @input float bufferSeconds = 5 {"hint":"Seconds the user has to cancel before the item is checked off", "widget":"slider", "min":1, "max":10, "step":0.5}'
     - '// @input float touchHoldSeconds = 0.3 {"hint":"Seconds the hand must stay on the item before the countdown starts", "widget":"slider", "min":0, "max":2, "step":0.05}'

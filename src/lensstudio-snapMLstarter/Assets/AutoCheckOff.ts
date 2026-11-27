@@ -12,6 +12,9 @@ const HANDS: HandType[] = ["left", "right"]
 const PENDING_COLOR = new vec4(0.1, 0.1, 0.1, 0.7)
 const DONE_COLOR = new vec4(0.15, 0.65, 0.25, 0.7)
 const CANCELLED_COLOR = new vec4(0.85, 0.15, 0.15, 0.7)
+// Same green as checked checklist rows; gray reads as "off" without looking like an error
+const TOGGLE_ON_COLOR = new vec4(0.15, 0.65, 0.25, 0.8)
+const TOGGLE_OFF_COLOR = new vec4(0.4, 0.4, 0.4, 0.8)
 const MARGIN_X = 1.5
 const MARGIN_Y = 0.5
 const CORNER_RADIUS = 0.5
@@ -63,6 +66,11 @@ export class AutoCheckOff extends BaseScriptComponent {
   @allowUndefined
   @hint("Toggleable UIKit button that turns the feature on and off")
   toggle: BaseButton
+
+  @input
+  @allowUndefined
+  @hint("Toggle label; shows ON/OFF and turns green or gray with the feature state")
+  toggleLabel: Text
 
   @input
   @hint("Whether auto check-off is on when the lens starts")
@@ -137,6 +145,7 @@ export class AutoCheckOff extends BaseScriptComponent {
       return
     }
     this.featureOn = on
+    this.refreshToggleLabel()
     this.log(on ? "enabled" : "disabled")
     if (!on) {
       this.pending = null
@@ -159,6 +168,8 @@ export class AutoCheckOff extends BaseScriptComponent {
     this.hidePrompt()
 
     this.featureOn = this.enabledAtStart
+    this.styleToggleLabel()
+    this.refreshToggleLabel()
     if (this.toggle) {
       this.toggle.onValueChange.add((value: number) => this.setFeatureOn(value === 1))
       this.toggle.isOn = this.enabledAtStart
@@ -382,6 +393,24 @@ export class AutoCheckOff extends BaseScriptComponent {
     background.enabled = true
     background.cornerRadius = CORNER_RADIUS
     background.margins = Rect.create(MARGIN_X, MARGIN_X, MARGIN_Y, MARGIN_Y)
+  }
+
+  private styleToggleLabel(): void {
+    if (!this.toggleLabel) {
+      return
+    }
+    const background = this.toggleLabel.backgroundSettings
+    background.enabled = true
+    background.cornerRadius = CORNER_RADIUS
+    background.margins = Rect.create(MARGIN_X, MARGIN_X, MARGIN_Y, MARGIN_Y)
+  }
+
+  private refreshToggleLabel(): void {
+    if (!this.toggleLabel) {
+      return
+    }
+    this.toggleLabel.text = this.featureOn ? "Auto check-off: ON" : "Auto check-off: OFF"
+    this.toggleLabel.backgroundSettings.fill.color = this.featureOn ? TOGGLE_ON_COLOR : TOGGLE_OFF_COLOR
   }
 
   private showPrompt(message: string, color: vec4): void {
