@@ -202,15 +202,22 @@ export class BoundingBoxVisualizer extends BaseScriptComponent {
    * PinholeCapture expects full camera frame UVs with v pointing up
    */
   private project(u: number, v: number): vec3 {
+    return this.pinholeCapture.captureToWorldTransform(this.cropUVToCaptureUV(u, v), this.boxDepth)
+  }
+
+  /**
+   * Map a detection UV (cropped model input, v down) to a full camera frame UV (v up),
+   * the space PinholeCapture and PinholeCameraModel work in
+   */
+  public cropUVToCaptureUV(u: number, v: number): vec2 {
     // Crop rect is in [-1, 1] local space with y pointing up
     const x = this.cropRect.left + u * (this.cropRect.right - this.cropRect.left)
     const y = this.cropRect.top - v * (this.cropRect.top - this.cropRect.bottom)
 
-    const uv = new vec2(
+    return new vec2(
       Math.max(0, Math.min(1, ((x + 1) / 2) * this.uvScale.x + this.uvOffset.x)),
       Math.max(0, Math.min(1, ((y + 1) / 2) * this.uvScale.y + this.uvOffset.y))
     )
-    return this.pinholeCapture.captureToWorldTransform(uv, this.boxDepth)
   }
 
   private sizeChanged(previous: vec2, current: vec2): boolean {
