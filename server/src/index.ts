@@ -3,11 +3,13 @@ import cors from 'cors';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { orderTargetChecklist as orderChecklist, floorPlan, navigate } from './targetNavigation.js';
 import {
   deleteItem,
   ensureSchema,
   insertItem,
   listItems,
+  migrateAisles,
   pingDb,
   type ItemStatus,
   updateItemStatus,
@@ -30,9 +32,32 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-app.get('/api/items', async (_req, res) => {
+// Stateless map APIs also accept the website's locally cached checklist aisles.
+app.get('/api/store-map', (_req, res) => res.json(floorPlan));
+app.post('/api/navigation', (req, res) => {
+  const aisles = req.body?.aisles;
+  if (!Array.isArray(aisles) || aisles.length > 500 ||
+      !aisles.every(id => id === null || (typeof id === 'string' && id.length <= 40))) {
+    res.status(400).json({ error: 'aisles must contain up to 500 strings or nulls' });
+    return;
+  }
+  const startAisle = req.body?.startAisle;
+  if (startAisle !== undefined && startAisle !== null &&
+      (typeof startAisle !== 'string' || startAisle.length > 40)) {
+    res.status(400).json({ error: 'startAisle must be a string of up to 40 characters or null' });
+    return;
+  }
+  res.json(navigate(aisles, undefined, startAisle));
+});
+
+app.get('/api/items', async (req, res) => {
   try {
-    res.json(await listItems());
+    const startAisle = req.query?.startAisle;
+    if (startAisle !== undefined && (typeof startAisle !== 'string' || startAisle.length > 40)) {
+      res.status(400).json({ error: 'startAisle must be a string of up to 40 characters' });
+      return;
+    }
+    res.json(orderChecklist(await listItems(), startAisle));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -94,8 +119,9 @@ app.use(express.static(webRoot));
 async function main() {
   try {
     await ensureSchema();
+    await migrateAisles();
   } catch (e) {
-    console.error('\nCould not connect to MySQL or create tables.');
+    console.error('\nCould not connect to MySQL, create tables, or migrate aisle mappings.');
     console.error('1) Install MySQL Server and start the service.');
     console.error('2) Create database `aislevision` (run server/mysql/workbench_setup.sql in Workbench).');
     console.error('3) Copy server/.env.example to server/.env and set MYSQL_PASSWORD.\n');
