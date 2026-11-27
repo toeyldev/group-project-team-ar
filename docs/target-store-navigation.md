@@ -147,45 +147,42 @@ the six-item example. E73/D74 and all field-verification limits still apply.
 
 ## Last picked-up position and new trips
 
-The website records explicit successful pickup events from checkboxes and the
-existing `window.markDetected` hook. It does not infer completion sequence from
-row order or from a set of already completed database rows. Before any mapped
-pickup, the start is the entrance. A successful mapped pickup validates its
-existing access point using `/api/navigation` and then saves that aisle ID in
-`av_target_trip_position_v1` in local storage, scoped to Target San Jose West.
-The server resolves the ID to the existing coordinates and uses A* to confirm
-reachability. Unknown, blank, or disconnected pickup locations preserve the last
-valid position. No new aisle coordinates are introduced.
+The server keeps one trip position: the aisle of the last item marked
+`picked_up`, from any client (website checkbox, `window.markDetected`, or a
+pinch on Spectacles). It is stored in the `trip_position` MySQL table, so it
+survives a server restart and is the same on every device. Before any mapped
+pickup, the start is the entrance.
 
-Pickup position updates are serialized. Failed status mutations do not move the
-position; a confirmed mutation records it before reloading the checklist, so a
-subsequent refresh failure does not lose the pickup. Unchecking, deleting rows,
-removing completed rows, and adding products leave position intact. A second
-pickup in the same aisle keeps the same access point. When no destinations
-remain, the line and destination markers clear, but the position stays saved.
+`PATCH /api/items/:id` with `status: "picked_up"` resolves the item's aisle
+with `resolveNavigationStart` (existing coordinates, A* reachability from the
+entrance) and saves it. Unknown, blank, or disconnected aisles keep the last
+valid position, and so do unchecking, deleting rows, removing completed rows,
+and adding products. If saving the position fails, the pickup itself still
+succeeds.
 
-The map's blue start marker follows the saved point with a `You are here · aisle`
-label. The same `startAisle` is sent with both navigation requests and the
-optional `/api/items?startAisle=...` query, keeping server and browser ordering
-consistent. GET item responses retain their plain-array shape and existing item
-fields; clients omitting the query, including Spectacles, retain entrance-based
-ordering. The FastAPI backend and detection model are unchanged. Completed rows
-received from other devices do not establish a new browser position because
-that API has no event timestamps; their display order is never treated as pickup
-history.
+`GET /api/items` routes from the saved position and returns it in the
+`X-Trip-Start-Aisle` response header (empty at the entrance). The response is
+still a plain array with the same item fields, so Spectacles get the shared
+order without any Lens changes. An explicit `?startAisle=` query still
+overrides the saved position for that request. `GET /api/trip` returns
+`{ "startAisle": ... }`, and `DELETE /api/trip` resets it to the entrance.
 
-Refresh restores the current trip until **New trip · entrance** is clicked. That
-button resets position and recalculates remaining stops without clearing or
-unchecking the checklist; **Reset view** only resets zoom/pan. In-flight pickup
-updates from a previous trip cannot overwrite a reset. If a stored aisle is no
-longer mapped/reachable, the route response safely resolves the start to the
-entrance and repairs storage. If browser storage is disabled, the position works
-in memory for the open page only. Position storage is local to this browser;
-it is not synchronized across devices.
+The website no longer stores the position in local storage. Each checklist
+load (after a change, and on the 2.5-second auto-refresh) reads the header and
+redraws the route when the position changed, so a pinch on the glasses moves
+the website's route within a few seconds. The map's blue start marker shows
+`You are here · aisle`. Website pickups are still serialized, so in-flight
+pickup updates from a previous trip cannot overwrite a reset.
+
+**New trip · entrance** resets the position on the server for every client and
+recalculates remaining stops without clearing or unchecking the checklist;
+**Reset view** only resets zoom/pan. If the saved aisle is no longer
+mapped/reachable, routing falls back to the entrance.
 
 Regression tests include the E66 → D27 pickup sequence, A* start and stop-order
 consistency, duplicate pickups, unsupported/unknown/disconnected aisles, add,
-uncheck, completed-row deletion, persistence across page initialization, reset,
+uncheck, completed-row deletion, position shared across page loads and with
+pickups made on the glasses, reset,
 detection completion, mutation/refresh failures, queued pickup/reset races, and
 empty-list clearing.
 
