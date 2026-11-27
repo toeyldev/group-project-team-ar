@@ -28,6 +28,7 @@ AisleVision is an Augmented Reality (AR) grocery assistant designed for Snap Spe
 - **Real-time Object detection:**
     -  YOLOv7-tiny runs on Spectacles through SnapML.
     -  Detected objects are labeled with confidence score and bounding box in the AR view.
+    -  Bounding boxes are shown only for items on the checklist that aren't checked off yet.
 - **Backend:**
     - Connects to Lens Studio.
     - A FastAPI server exposes the checklist as a REST API (`GET`/`POST` items, `PATCH` to check an item, `DELETE`).
@@ -38,15 +39,16 @@ AisleVision is an Augmented Reality (AR) grocery assistant designed for Snap Spe
   - The checklist is shown in the AR view as one row per item with a progress bar and percentage.
   - User can pinch to check items off the checklist.
   - The aisle number of the checklist is displayed.
-  - Auto check-off: when the user's hand touches a detected item that is on the list, a 5-second countdown starts and then the item is checked off. Holding an open palm toward the glasses cancels it. The "Auto check-off" toggle above the checklist turns the feature on or off (on by default).
+  - Auto check-off: when the user's hand touches a detected item that is on the list, a 5-second countdown starts and then the item is checked off. Holding an open palm toward the glasses cancels it. The "Auto check-off" toggle above the checklist turns the feature on or off (on by default) and shows its state: ON (green) or OFF (gray).
 - **Path Planning:**
   - 2D store-map data collection and an A* pathfinding algorithm with unit tests (branch: `feature/2d-path-planning`).
+  - 2D path planning is integrated into the checklist, so items are reordered based on their location in the store.
 
 #### Incomplete/left for the Expo:
 - **Object detection and checklist:**
-  - Connect detection to the checklist: When the user picks up an item and their hand touches the item's bounding box, the item checks itself off the list automatically.
+  - Tune auto check-off sensitivity (reach, box padding, hold time) in real stores.
 - **Path planning:**
-  - Integrate 2D path planning into the checklist so items are reordered based on location in the store.
+  - Add a time estimate based on route distance.
 - **Optional:**
   - Voice narration and 3D arrows for navigation.
   - Add more grocery items to detection by custom-training the model/adding second detection model.
@@ -158,7 +160,7 @@ AisleVision is an Augmented Reality (AR) grocery assistant designed for Snap Spe
 7. Power on and connect Spectacles to mobile app and Lens Studio.
 8. In Lens Studio, Click `Preview Lens`.
 9. Wait for the lens to load on the Spectacles.
-10. Look through the glasses at the grocery list, point at a row, and pinch to check an item off. The website updates and changes made on the website appear on the glasses within ~5 seconds.
+10. Look through the glasses at the grocery list, point at a row, and pinch to check an item off, or touch an item on the list and wait 5 seconds for it to check itself off (show an open palm to cancel). The website updates and changes made on the website appear on the glasses within ~5 seconds.
 
 ---
 
@@ -384,11 +386,11 @@ within a few seconds, and **Refresh now** remains available for manual sync.
 
 ## What's Next (Before Project Expo)
 **Object detection and checklist:**
-- Connect detection to the checklist: When the user picks up an item and their hand touches the item's bounding box, the item checks itself off the list automatically.
+- Tune auto check-off sensitivity (reach, box padding, hold time) in real stores.
 - _(Bonus): Add more grocery items to detection by custom-training the model/adding second detection model._
 
 **Path planning:**
-- Integrate 2D path planning into the checklist backend so items are reordered based on location in the store.
+- Add a time estimate based on route distance.
 - _(Bonus): Add voice narration or 3D arrow visuals for navigation._
 
 **Testing:**
