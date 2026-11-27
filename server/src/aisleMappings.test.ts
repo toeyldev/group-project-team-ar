@@ -6,43 +6,71 @@ import vm from 'node:vm';
 import mysql from 'mysql2/promise';
 import { AISLES_BY_ITEM, aisleForItem, aisleMigrationSql, aisleMigrationParams } from './aisleMappings.js';
 import { orderChecklist } from './checklistOrdering.js';
+import { floorPlan, navigate } from './targetNavigation.js';
 
-const expected = Object.fromEntries(`Cup:E80,Bottle:Q19,Microwave:D74,Potted plant:B5,Keyboard:D36,Backpack:P26,Umbrella:UT50,Handbag:AC50,Tie:MN50,Suitcase:D49,Sports ball:Q21,Baseball bat:Q21,Baseball glove:Q21,Tennis racket:Q19,Wine glass:E66,Fork:E73,Knife:E60,Spoon:E73,Bowl:E80,Banana:B49,Apple:B50,Sandwich:B43,Orange:B49,Broccoli:B57,Carrot:B57,Hot dog:B48,Pizza:B42,Donut:B31,Cake:B39,Chair:E83,TV:D69,Laptop:D27,Mouse:D36,Remote:D69,Toaster:D73,Book:D48,Clock:E83,Vase:E10,Scissors:A23,Teddy bear:P24,Hair drier:C20,Toothbrush:C27`.split(',').map(pair => pair.split(':')));
+const expected: Record<string, string> = Object.fromEntries(`Cup:E80,Bottle:Q19,Microwave:D74,Potted plant:B5,Keyboard:D36,Backpack:P26,Umbrella:UT50,Handbag:AC50,Tie:MN50,Suitcase:D49,Sports ball:Q21,Baseball bat:Q21,Baseball glove:Q21,Tennis racket:Q19,Wine glass:E66,Fork:E73,Knife:E60,Spoon:E73,Bowl:E80,Banana:B49,Apple:B50,Sandwich:B43,Orange:B49,Broccoli:B57,Carrot:B57,Hot dog:B48,Pizza:B42,Donut:B31,Cake:B39,Chair:E83,TV:D69,Laptop:D27,Mouse:D36,Remote:D69,Toaster:D73,Book:D48,Clock:E83,Vase:E10,Scissors:A23,Teddy bear:P24,Hair drier:C20,Toothbrush:C27`.split(',').map(pair => pair.split(':')));
+const removed = new Set(['scissors', 'handbag', 'tv', 'remote', 'toaster', 'vase', 'tie', 'umbrella']);
+const activeExpected = Object.fromEntries(Object.entries(expected).filter(([name]) => !removed.has(name.toLowerCase())));
 const source = readFileSync(new URL('../../web/js/app.js', import.meta.url), 'utf8');
 
-test('all 42 dropdown items have exact backend and browser aisle mappings', () => {
+test('all 34 dropdown items have exact supported aisles; historical backend mappings remain intact', () => {
   const html = readFileSync(new URL('../../web/app.html', import.meta.url), 'utf8');
   const names = [...html.matchAll(/<option value="([^"]+)">/g)].map(match => match[1]);
-  assert.equal(names.length, 42);
-  assert.deepEqual(names.map(name => name.toLowerCase()), Object.keys(expected).map(name => name.toLowerCase()));
+  assert.equal(names.length, 34);
+  assert.deepEqual(names.map(name => name.toLowerCase()), Object.keys(activeExpected).map(name => name.toLowerCase()));
   assert.equal(Object.keys(AISLES_BY_ITEM).length, 42);
   const browser = vm.createContext({ window: {}, document: { addEventListener() {} } });
   vm.runInContext(source, browser);
   for (const [name, aisle] of Object.entries(expected)) {
     assert.equal(aisleForItem(` ${name.toUpperCase()} `), aisle);
-    assert.equal(vm.runInContext(`aisleForItem(${JSON.stringify(name)})`, browser), aisle);
+    assert.equal(vm.runInContext(`aisleForItem(${JSON.stringify(name)})`, browser), removed.has(name.toLowerCase()) ? null : aisle);
+    if (!removed.has(name.toLowerCase())) assert(Object.hasOwn(floorPlan.aisles, aisle));
   }
+  assert.equal(navigate(Object.values(activeExpected)).skipped.length, 0);
   for (const name of ['Unknown', 'Frisbee', 'Kite', 'Skateboard', 'Cell phone', '__proto__', 'constructor']) {
     assert.equal(aisleForItem(name), null);
     assert.equal(vm.runInContext(`aisleForItem(${JSON.stringify(name)})`, browser), null);
   }
 });
 
+test('browser fallback demo products are supported by the current floor plan', () => {
+  const context = vm.createContext({ window: {}, document: { addEventListener() {} }, localStorage: { setItem() {} } });
+  vm.runInContext(source, context);
+  vm.runInContext('seedDemoItems()', context);
+  const aisles = JSON.parse(vm.runInContext('JSON.stringify(items.map(item=>item.aisle))', context));
+  assert.deepEqual(navigate(aisles).skipped, []);
+});
+
 for (const online of [false, true]) {
-  test(`website adds all 42 aisles and supports check/uncheck/delete/refresh (${online ? 'API' : 'offline'})`, async () => {
+  test(`website adds all 34 active products and supports check/uncheck/delete/refresh (${online ? 'API' : 'offline'})`, async () => {
     type Element = { value: string; innerHTML: string; textContent: string; selectedIndex: number; dataset: Record<string, unknown>; children: Element[]; listeners: Record<string, (event?: unknown) => unknown>; addEventListener(type: string, fn: (event?: unknown) => unknown): void; focus(): void; appendChild(child: Element): void; querySelectorAll(): never[] };
     const elements = new Map<string, Element>();
     const makeElement = (): Element => ({ value: '', innerHTML: '', textContent: '', selectedIndex: 0, dataset: {}, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, focus() {}, appendChild(child) { this.children.push(child); }, querySelectorAll() { return []; } });
     const element = (id: string) => { if (!elements.has(id)) elements.set(id, makeElement()); return elements.get(id)!; };
     let ready: () => Promise<void> = async () => {};
-    let rows = [{ id: 1, name: 'Banana', aisle: 'B49', status: 'not_picked_up' }];
+    const hiddenRows = Object.entries(expected).filter(([name]) => removed.has(name.toLowerCase())).map(([name, aisle], i) => ({
+      id: 100 + i, name: ` ${name.toUpperCase()} `, aisle, status: i % 2 ? 'picked_up' : 'not_picked_up',
+    }));
+    let rows = [{ id: 1, name: 'Banana', aisle: 'B49', status: 'not_picked_up' }, ...structuredClone(hiddenRows)];
+    const hiddenBefore = structuredClone(hiddenRows);
+    const hiddenLocal = hiddenRows.map(row => ({ id: row.id, name: row.name, aisle: row.aisle, checked: row.status === 'picked_up', detected: false }));
+    const requests: { url: string; method?: string }[] = [];
+    const routeInputs: { name: string; aisle: string }[][] = [];
+    const alerts: string[] = [];
     let nextId = 2;
-    const storage = new Map([['av_items', JSON.stringify([{ id: 1, name: 'Banana', aisle: 'B9', checked: false, detected: false }])], ['av_nextId', '2']]);
+    const storage = new Map([['av_items', JSON.stringify([{ id: 1, name: 'Banana', aisle: 'B9', checked: false, detected: false }, ...hiddenLocal])], ['av_nextId', '2']]);
     const context = vm.createContext({
-      window: {}, document: { addEventListener: (_: string, fn: typeof ready) => { ready = fn; }, getElementById: element, createElement: makeElement },
+      window: { StoreNavigation: {
+        getStartAisle: () => 'D27', recordPickup() {}, resetTrip() {},
+        update(items: { name: string; aisle: string; checked: boolean }[], callback: any) {
+          routeInputs.push(structuredClone(items));
+          callback(navigate(items.filter(item => !item.checked).map(item => item.aisle), undefined, 'D27'));
+        },
+      } }, document: { addEventListener: (_: string, fn: typeof ready) => { ready = fn; }, getElementById: element, createElement: makeElement },
       localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) },
-      alert: (message: string) => assert.fail(message),
+      alert: (message: string) => { if (!message.includes('aisle is not mapped')) assert.fail(message); alerts.push(message); },
       fetch: async (url: string, options?: { method?: string; body?: string }) => {
+        requests.push({ url, method: options?.method });
         const body = JSON.parse(options?.body ?? '{}');
         const id = Number(url.split('/').at(-1));
         if (options?.method === 'POST') rows.push({ id: nextId++, name: body.name, aisle: aisleForItem(body.name)!, status: 'not_picked_up' });
@@ -54,7 +82,7 @@ for (const online of [false, true]) {
     vm.runInContext(source, context);
     await ready();
     assert.equal(vm.runInContext('items[0].aisle', context), 'B49', 'old local Banana aisle is corrected');
-    for (const [name, aisle] of Object.entries(expected)) {
+    for (const [name, aisle] of Object.entries(activeExpected)) {
       element('commonItemSelect').value = name;
       element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
       assert.equal(element('itemInput').value, name);
@@ -64,19 +92,44 @@ for (const online of [false, true]) {
       assert.equal(vm.runInContext(`items.findLast(item => item.name === ${JSON.stringify(name)}).aisle`, context), aisle);
       assert.ok(element('shoppingList').children.some(child => child.innerHTML.includes(`Aisle ${aisle}`)));
     }
-    assert.equal(vm.runInContext('items.length', context), 43);
+    assert.equal(vm.runInContext('activeItems().length', context), 35);
     await vm.runInContext('toggleCheck(1)', context);
     assert.equal(vm.runInContext('items.find(item => item.id === 1).checked', context), true);
-    if (online) assert.equal(vm.runInContext('items.at(-1).id', context), 1);
+    if (online) assert.equal(vm.runInContext('activeItems().at(-1).id', context), 1);
     await vm.runInContext('toggleCheck(1)', context);
     assert.equal(vm.runInContext('items.find(item => item.id === 1).checked', context), false);
     await vm.runInContext('deleteItem(1)', context);
     await vm.runInContext('refreshFromServer()', context);
     assert.equal(vm.runInContext('items.some(item => item.id === 1)', context), false);
-    assert.equal(vm.runInContext('items.length', context), 42);
+    assert.equal(vm.runInContext('activeItems().length', context), 34);
     await vm.runInContext('toggleCheck(2);', context);
     await vm.runInContext('clearChecked()', context);
-    assert.equal(vm.runInContext('items.length', context), 41);
+    assert.equal(vm.runInContext('activeItems().length', context), 33);
+    // Typed names and stale dropdown values cannot reintroduce the hidden products.
+    const count = vm.runInContext('items.length', context);
+    const posts = requests.filter(request => request.method === 'POST').length;
+    for (const name of removed) {
+      element('itemInput').value = ` ${name.toUpperCase()} `;
+      await vm.runInContext('addItem()', context);
+      element('commonItemSelect').value = name;
+      element('itemInput').value = '';
+      element('commonItemSelect').listeners.change({ target: element('commonItemSelect') });
+      assert.equal(element('itemInput').value, '');
+    }
+    assert.equal(alerts.length, 8);
+    assert.equal(vm.runInContext('items.length', context), count);
+    assert.equal(requests.filter(request => request.method === 'POST').length, posts);
+    for (const row of hiddenBefore) {
+      await vm.runInContext(`toggleCheck(${row.id}); deleteItem(${row.id});`, context);
+    }
+    const hiddenAfter = JSON.parse(vm.runInContext('JSON.stringify(items.filter(item => !isActiveItem(item)).map(({id,name,aisle,checked})=>({id,name,aisle,checked})))', context));
+    assert.deepEqual(hiddenAfter.sort((a: any, b: any) => a.id - b.id), hiddenLocal.map(({id,name,aisle,checked})=>({id,name,aisle,checked})));
+    if (online) assert.deepEqual(rows.filter(row => removed.has(row.name.trim().toLowerCase())), hiddenBefore);
+    assert(routeInputs.length > 0);
+    assert(routeInputs.every(input => input.every(item => !removed.has(item.name.trim().toLowerCase()))));
+    assert.equal(vm.runInContext('window.StoreNavigation.getStartAisle()', context), 'D27');
+    assert(!requests.some(request => ['PATCH', 'DELETE'].includes(request.method ?? '') && Number(request.url.split('/').at(-1)) >= 100));
+
   });
 }
 

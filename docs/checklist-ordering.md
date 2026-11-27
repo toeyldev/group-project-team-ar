@@ -1,5 +1,11 @@
 # Automatic Node checklist ordering
 
+> Historical demo notes: `/app.html` and `GET /api/items` now use the Target
+> corridor prototype described in [Target store navigation](target-store-navigation.md).
+> The sections below document the retained demo adapter and its regression tests.
+> Current Banana mapping is B49; the older B9 references below are superseded.
+
+
 The Node/TypeScript backend now orders `GET /api/items` using
 `server/src/checklistOrdering.ts`. The response remains a plain array of
 `{ id, name, aisle, status }` rows. No fields, database records, schema, or

@@ -340,3 +340,27 @@
   .add-row { flex-direction: column; }
   .btn-primary { width: 100%; }
 }
+
+/* Keep the existing checklist card beside a shared-coordinate SVG floor plan. */
+.app-header-inner { max-width: 1280px; }
+.app-main { max-width: 1280px; display: grid; grid-template-columns: minmax(440px, 1fr) minmax(0, 1.3fr); gap: 24px; align-items: start; }
+.map-status { padding: 12px 18px; font-size: .8125rem; }
+.map-controls { display: flex; gap: 8px; padding: 12px 18px 4px; }
+.map-controls .btn-secondary { min-width: 44px; flex: 0 1 auto; }
+.map-help { padding: 4px 18px 8px; }
+#storeMap { display: block; width: 100%; aspect-ratio: 492 / 540; background: white; touch-action: none; cursor: grab; }
+#storeMap:active { cursor: grabbing; }
+.map-label { font-size: 7px; font-weight: 700; fill: #111827; stroke: white; stroke-width: 2px; paint-order: stroke; }
+.map-status { border-top: 1px solid var(--border); min-height: 65px; }
+.list-item.next-stop { background: #fff1f2; border-left: 4px solid #dc0000; padding-left: 18px; }
+.item-delete:focus-visible { opacity: 1; }
+@media (max-width: 960px) {
+  .app-main { grid-template-columns: minmax(0, 1fr); max-width: 680px; }
+  .item-delete { opacity: 1; }
+}
+@media (max-width: 480px) {
+  .list-item { padding: 12px; gap: 7px; flex-wrap: wrap; }
+  .item-name { flex-basis: 40%; }
+  .item-input { min-width: 0; }
+  .app-main { padding: 16px 10px; }
+}
