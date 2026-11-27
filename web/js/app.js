@@ -86,17 +86,20 @@ async function tryHealth() {
 }
 
 async function loadFromServer() {
-  const from = window.StoreNavigation?.getStartAisle?.();
-  const r = await fetch('/api/items' + (from ? `?startAisle=${encodeURIComponent(from)}` : ''));
+  // The server routes from the shared trip position, so pickups on the glasses reorder this list too.
+  const r = await fetch('/api/items');
   if (!r.ok) throw new Error('failed to load items');
   const rows = await r.json();
+  const serverStart = r.headers?.get?.('X-Trip-Start-Aisle');
+  const startChanged = typeof serverStart === 'string'
+    && Boolean(window.StoreNavigation?.syncStart?.(serverStart));
   const detectedById = new Map(items.map((item) => [item.id, item.detected]));
   const nextItems = rows.map((row) => {
     const item = serverRowToClient(row);
     item.detected = detectedById.get(item.id) || false;
     return item;
   });
-  const changed = nextItems.length !== items.length || nextItems.some((item, index) => {
+  const changed = startChanged || nextItems.length !== items.length || nextItems.some((item, index) => {
     const current = items[index];
     return !current
       || current.id !== item.id
@@ -231,9 +234,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('clearPickedBtn').addEventListener('click', () => clearChecked());
   document.getElementById('refreshBtn').addEventListener('click', () => refreshFromServer());
-  document.getElementById('newTrip').addEventListener('click', () => {
-    window.StoreNavigation?.resetTrip();
+  document.getElementById('newTrip').addEventListener('click', async () => {
+    const reset = window.StoreNavigation?.resetTrip();
     renderList();
+    await reset;
+    await refreshFromServer();
   });
 
   apiOnline = await tryHealth();

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { floorPlan, navigate, orderTargetChecklist, targetMap } from './targetNavigation.js';
+import { floorPlan, navigate, orderTargetChecklist, resolveNavigationStart, targetMap } from './targetNavigation.js';
 import { findPath, isWalkable } from './pathfinding/astar.js';
 import type { GroceryRow } from './db.js';
 
@@ -42,7 +42,9 @@ class Node {
   querySelectorAll() { return []; }
 }
 const source = (file: string) => readFileSync(new URL(`../../web/js/${file}`, import.meta.url), 'utf8');
-async function browser(storage = new Map<string, string>()) {
+type FakeServer = { position: string | null };
+async function browser(server: FakeServer = { position: null }) {
+  const storage = new Map<string, string>();
   const nodes: Record<string, Node> = {};
   const node = (id: string) => nodes[id] ??= new Node();
   node('storeMapImage').attrs = { href: floorPlan.image, width: floorPlan.width, height: floorPlan.height };
@@ -53,6 +55,14 @@ async function browser(storage = new Map<string, string>()) {
   const rows: GroceryRow[] = ['Wine glass', 'Laptop', 'Mouse', 'Cake', 'Tie', 'Laptop'].map((name, i) => ({
     id: i + 1, name, aisle: ['E66', 'D27', 'D36', 'B39', 'MN50', 'D27'][i], status: 'not_picked_up',
   }));
+  // Same rule as PATCH /api/items/:id: a pickup in a mapped aisle moves the shared position.
+  const pickUp = (id: number, status: GroceryRow['status']) => {
+    const row = rows.find(row => row.id === id)!;
+    row.status = status;
+    const start = resolveNavigationStart(row.aisle);
+    if (status === 'picked_up' && start.aisle) server.position = start.aisle;
+    return row;
+  };
   const context = vm.createContext({ console: { error() {} }, window: { setInterval() {} }, document: {
     getElementById: node, createElement: () => new Node(), createElementNS: () => new Node(),
     addEventListener(_event: string, callback: any) { domReady = callback; },
@@ -66,16 +76,19 @@ async function browser(storage = new Map<string, string>()) {
     else if (url === '/api/navigation') {
       value = navigate(body.aisles, targetMap, body.startAisle);
       if (body.aisles.length === 0 && body.startAisle) pickups.push(body.startAisle);
+    } else if (url === '/api/trip' && options?.method === 'DELETE') {
+      server.position = null;
+      return { ok: true, json: async () => null };
     } else if (options?.method === 'PATCH') {
       if (failPatch) return { ok: false };
-      const row = rows.find(row => row.id === Number(url.split('/').pop()))!;
-      row.status = body.status; value = row;
-    } else if (url.startsWith('/api/items')) {
+      value = pickUp(Number(url.split('/').pop()), body.status);
+    } else if (url === '/api/items') {
       if (failRefresh) throw new Error('refresh failed');
-      const parsed = new URL(url, 'http://localhost');
-      value = orderTargetChecklist(rows, parsed.searchParams.get('startAisle'));
+      value = orderTargetChecklist(rows, server.position);
+      const header = server.position ?? '';
+      return { ok: true, headers: { get: (name: string) => name === 'X-Trip-Start-Aisle' ? header : null }, json: async () => structuredClone(value) };
     } else throw new Error(`Unexpected request ${url}`);
-    return { ok: true, json: async () => structuredClone(value) };
+    return { ok: true, headers: { get: () => null }, json: async () => structuredClone(value) };
   } });
   vm.runInContext(source('store-navigation.js'), context);
   vm.runInContext(source('app.js'), context);
@@ -83,10 +96,10 @@ async function browser(storage = new Map<string, string>()) {
   const run = (code: string) => vm.runInContext(code, context);
   const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
   await flush();
-  return { run, flush, nodes, requests, pickups, storage, failPatch: () => { failPatch = true; }, failRefresh: () => { failRefresh = true; } };
+  return { run, flush, nodes, requests, pickups, storage, server, rows, pickUp, failPatch: () => { failPatch = true; }, failRefresh: () => { failRefresh = true; } };
 }
 
-test('pickup events persist position, reorder from that aisle, and retain it for duplicate/unsupported/uncheck/delete/add', async () => {
+test('pickup events save position on the server, reorder from that aisle, and retain it for duplicate/unsupported/uncheck/delete/add', async () => {
   const b = await browser();
   assert.equal(b.run('window.StoreNavigation.getStartAisle()'), null);
   await b.run('toggleCheck(1)'); await b.flush();
@@ -95,7 +108,8 @@ test('pickup events persist position, reorder from that aisle, and retain it for
   assert.equal(b.nodes.navigationStart.attrs.cy, floorPlan.aisles.E66[1]);
   assert.match(b.nodes.navigationStartLabel.textContent, /E66/);
   assert.equal(b.nodes.storeMapRoute.children[1].attrs.points.split(' ')[0], floorPlan.aisles.E66.join(','));
-  assert.equal([...b.requests].reverse().find(req => req.url.startsWith('/api/items'))!.url, '/api/items?startAisle=E66');
+  assert.equal(b.server.position, 'E66');
+  assert(b.requests.every(req => !req.url.includes('startAisle')), 'the website no longer sends its own position');
   await b.run('toggleCheck(2)'); await b.flush();
   assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
   // A pending duplicate at the current point keeps its stop number visible above the start marker.
@@ -114,14 +128,16 @@ test('pickup events persist position, reorder from that aisle, and retain it for
   const displayed = JSON.parse(b.run('JSON.stringify(activeItems().filter(i=>!i.checked).map(i=>i.aisle))'));
   const expected = navigate(displayed, targetMap, 'D27');
   assert.deepEqual(displayed, expected.stops.map(stop => stop.aisle));
-  const reloaded = await browser(b.storage);
+  // A fresh page (or another device) gets the position from the server, not from browser storage.
+  const reloaded = await browser(b.server);
   assert.equal(reloaded.run('window.StoreNavigation.getStartAisle()'), 'D27');
   assert.match(reloaded.nodes.navigationStartLabel.textContent, /D27/);
-  assert.equal(reloaded.requests.find(req => req.url.startsWith('/api/items'))!.url, '/api/items?startAisle=D27');
-  reloaded.nodes.newTrip.events.click(); await reloaded.flush();
+  assert(![...b.storage.keys(), ...reloaded.storage.keys()].some(key => key.includes('position')));
+  await reloaded.nodes.newTrip.events.click(); await reloaded.flush();
   assert.equal(reloaded.run('window.StoreNavigation.getStartAisle()'), null);
+  assert.equal(reloaded.server.position, null);
   assert.match(reloaded.nodes.navigationStartLabel.textContent, /entrance/);
-  const resetReload = await browser(reloaded.storage);
+  const resetReload = await browser(reloaded.server);
   assert.equal(resetReload.run('window.StoreNavigation.getStartAisle()'), null);
 });
 
@@ -137,10 +153,10 @@ test('detection completion records position; failed pickup does not move it; suc
   assert.equal(failedRefresh.run('window.StoreNavigation.getStartAisle()'), 'D27');
 });
 
-test('stored unknown aisle falls back safely; queued completions respect event order and trip reset', async () => {
-  const storage = new Map([['av_target_trip_position_v1', JSON.stringify({ store: 'target-san-jose-west', aisle: 'MISSING' })]]);
-  const b = await browser(storage);
-  assert.equal(b.run('window.StoreNavigation.getStartAisle()'), null);
+test('unknown server position falls back to the entrance; queued completions respect event order and trip reset', async () => {
+  const b = await browser({ position: 'MISSING' });
+  assert.match(b.nodes.navigationStartLabel.textContent, /entrance/);
+  assert.match(b.nodes.mapStatus.textContent, /aisle stops/);
   await b.run("Promise.all([window.StoreNavigation.recordPickup('E66'), window.StoreNavigation.recordPickup('D27'), window.StoreNavigation.recordPickup('MN50')])");
   assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
   await b.run("(async()=>{const pending=window.StoreNavigation.recordPickup('D36');window.StoreNavigation.resetTrip();await pending;})()");
@@ -150,10 +166,25 @@ test('stored unknown aisle falls back safely; queued completions respect event o
 });
 
 
-test('malformed or oversized persisted positions do not block checklist/map loading', async () => {
-  for (const value of ['not json', JSON.stringify({ store: 'target-san-jose-west', aisle: 'x'.repeat(41) }), JSON.stringify({ store: 'another-store', aisle: 'D27' })]) {
-    const b = await browser(new Map([['av_target_trip_position_v1', value]]));
-    assert.equal(b.run('window.StoreNavigation.getStartAisle()'), null);
+test('blank, oversized or unmapped server positions do not block checklist/map loading', async () => {
+  for (const position of ['', 'x'.repeat(41), 'MN50']) {
+    const b = await browser({ position });
+    assert.match(b.nodes.navigationStartLabel.textContent, /entrance/);
     assert.match(b.nodes.mapStatus.textContent, /aisle stops/);
   }
+});
+
+test('a pickup on the glasses moves the website route on the next refresh', async () => {
+  const b = await browser();
+  assert.equal(b.run('window.StoreNavigation.getStartAisle()'), null);
+  b.pickUp(2, 'picked_up'); // the Lens PATCHes the server directly; the website is not involved
+  await b.run('refreshFromServer()'); await b.flush();
+  assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
+  assert.match(b.nodes.navigationStartLabel.textContent, /D27/);
+  const shown = JSON.parse(b.run('JSON.stringify(items.map(i => i.id))'));
+  assert.deepEqual(shown, orderTargetChecklist(b.rows, 'D27').map(row => row.id));
+  // Picking up an unmapped item on the glasses keeps the last mapped position.
+  b.pickUp(5, 'picked_up');
+  await b.run('refreshFromServer()'); await b.flush();
+  assert.equal(b.run('window.StoreNavigation.getStartAisle()'), 'D27');
 });

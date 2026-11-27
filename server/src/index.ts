@@ -3,14 +3,21 @@ import cors from 'cors';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { orderTargetChecklist as orderChecklist, floorPlan, navigate } from './targetNavigation.js';
+import {
+  orderTargetChecklist as orderChecklist,
+  floorPlan,
+  navigate,
+  resolveNavigationStart,
+} from './targetNavigation.js';
 import {
   deleteItem,
   ensureSchema,
+  getTripPosition,
   insertItem,
   listItems,
   migrateAisles,
   pingDb,
+  setTripPosition,
   type ItemStatus,
   updateItemStatus,
 } from './db.js';
@@ -57,7 +64,10 @@ app.get('/api/items', async (req, res) => {
       res.status(400).json({ error: 'startAisle must be a string of up to 40 characters' });
       return;
     }
-    res.json(orderChecklist(await listItems(), startAisle));
+    // Without ?startAisle, route from the saved trip position shared by the glasses and website.
+    const tripAisle = await getTripPosition();
+    res.set('X-Trip-Start-Aisle', tripAisle ?? '');
+    res.json(orderChecklist(await listItems(), startAisle ?? tripAisle));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -93,6 +103,15 @@ app.patch('/api/items/:id', async (req, res) => {
     res.status(404).json({ error: 'not found' });
     return;
   }
+  // A pickup moves the shopper to that item's aisle; unmapped aisles and unchecking keep the position.
+  if (status === 'picked_up') {
+    const start = resolveNavigationStart(row.aisle);
+    try {
+      if (start.aisle) await setTripPosition(start.aisle);
+    } catch (e) {
+      console.warn('Could not save trip position; the pickup is still saved:', e);
+    }
+  }
   res.json(row);
 });
 
@@ -108,6 +127,24 @@ app.delete('/api/items/:id', async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+app.get('/api/trip', async (_req, res) => {
+  try {
+    res.json({ startAisle: await getTripPosition() });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// "New trip" on the website moves the shopper back to the entrance for every client.
+app.delete('/api/trip', async (_req, res) => {
+  try {
+    await setTripPosition(null);
+    res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 app.get('/', (_req, res) => {
